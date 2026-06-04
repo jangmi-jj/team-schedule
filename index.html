@@ -240,6 +240,10 @@
         <textarea id="log-content" placeholder="오늘 수행한 작업 내용을 입력해 주세요"></textarea>
       </div>
       <div class="form-group">
+        <label>고객 담당자</label>
+        <input id="log-customer" type="text" placeholder="고객사 담당자 이름" />
+      </div>
+      <div class="form-group">
         <label>이슈사항 <span style="font-weight:400;color:var(--muted)">(없으면 비워두세요)</span></label>
         <textarea id="log-issue" placeholder="작업 중 발생한 이슈를 입력해 주세요" style="min-height:60px"></textarea>
       </div>
@@ -317,9 +321,23 @@
         <button onclick="closeUnitModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--muted)">✕</button>
       </div>
       <div id="unit-list" style="margin-bottom:16px"></div>
-      <div style="display:flex;gap:8px">
-        <input id="new-unit-name" type="text" placeholder="예: 1F 1호기" onkeydown="if(event.key==='Enter')addUnit()" />
-        <button class="btn btn-primary btn-sm" onclick="addUnit()" style="white-space:nowrap">추가</button>
+      <div style="border-top:1px solid var(--border);padding-top:14px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">➕ 호기 추가</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:11px;color:var(--muted);margin-bottom:4px">호기 ID / S/N</label>
+            <input id="new-unit-name" type="text" placeholder="예: SN-12345" />
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);margin-bottom:4px">FAB</label>
+            <input id="new-unit-fab" type="text" placeholder="예: M15X, TSV, 1F" />
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:11px;color:var(--muted);margin-bottom:4px">세부 위치</label>
+          <input id="new-unit-location" type="text" placeholder="예: A-3열, Bay 2, Clean Room" onkeydown="if(event.key==='Enter')addUnit()" />
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="addUnit()" style="width:100%">추가</button>
       </div>
       <p id="unit-msg" style="margin-top:8px;font-size:13px"></p>
     </div>
@@ -512,7 +530,12 @@ function loadProjectList() {
         </div>
       </div>
       ${units.length ? `<div style="padding:8px 16px;display:flex;flex-wrap:wrap;gap:6px">
-        ${units.map(u=>`<span style="font-size:11px;background:${color}20;color:${color};padding:3px 10px;border-radius:20px;font-weight:600">${escHtml(u.name)}</span>`).join('')}
+        ${units.map(u=>`
+          <span style="font-size:11px;background:${color}15;color:${color};padding:3px 10px;border-radius:20px;font-weight:600;display:inline-flex;align-items:center;gap:4px">
+            ${escHtml(u.name)}
+            ${u.fab?`<span style="opacity:.7">·${escHtml(u.fab)}</span>`:''}
+            ${u.location?`<span style="opacity:.7">·${escHtml(u.location)}</span>`:''}
+          </span>`).join('')}
       </div>` : ''}
     </div>`;
   }).join('');
@@ -764,8 +787,9 @@ async function togglePjtCard(projectId, card) {
           </button>
           ${units.map(u=>`
             <button class="unit-tab" onclick="loadUnitHistory('${projectId}','${u.id}',this)"
-              style="padding:5px 12px;border-radius:20px;border:1.5px solid ${p?.color};background:#fff;color:${p?.color};font-size:12px;font-weight:700;cursor:pointer">
-              ${escHtml(u.name)}
+              style="padding:5px 12px;border-radius:20px;border:1.5px solid ${p?.color};background:#fff;color:${p?.color};font-size:12px;font-weight:700;cursor:pointer;text-align:left">
+              <div>${escHtml(u.name)}</div>
+              ${(u.fab||u.location)?`<div style="font-size:10px;font-weight:400;opacity:.8">${[u.fab,u.location].filter(Boolean).join(' · ')}</div>`:''}
             </button>`).join('')}
         </div>
         <div id="unit-hist-${projectId}"><div class="loading">불러오는 중...</div></div>
@@ -1142,18 +1166,39 @@ function renderUnitList() {
     return;
   }
   el.innerHTML = units.map(u=>`
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border)">
-      <span style="font-size:14px;font-weight:600">${escHtml(u.name)}</span>
-      <button onclick="deleteUnit('${u.id}')" class="btn btn-danger btn-sm">삭제</button>
+    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:3px">${escHtml(u.name)}</div>
+          <div style="font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap">
+            ${u.fab ? `<span>FAB: <strong style="color:var(--text)">${escHtml(u.fab)}</strong></span>` : ''}
+            ${u.location ? `<span>위치: <strong style="color:var(--text)">${escHtml(u.location)}</strong></span>` : ''}
+          </div>
+        </div>
+        <button onclick="deleteUnit('${u.id}')" class="btn btn-danger btn-sm" style="flex-shrink:0">삭제</button>
+      </div>
     </div>`).join('');
+}
+
+function unitDisplayName(u) {
+  const parts = [u.name];
+  if (u.fab) parts.push(`FAB: ${u.fab}`);
+  if (u.location) parts.push(u.location);
+  return parts.join(' · ');
 }
 
 async function addUnit() {
   const name = document.getElementById('new-unit-name').value.trim();
-  if (!name || !currentUnitProjectId) return;
-  const {error} = await sb.from('equipment_units').insert({project_id:currentUnitProjectId, name});
+  const fab = document.getElementById('new-unit-fab').value.trim();
+  const location = document.getElementById('new-unit-location').value.trim();
+  if (!name || !currentUnitProjectId) { showMsg('unit-msg','호기 ID/S/N을 입력해 주세요',false); return; }
+  const {error} = await sb.from('equipment_units').insert({
+    project_id: currentUnitProjectId, name, fab, location
+  });
   if (error) { showMsg('unit-msg','추가 실패: '+error.message,false); return; }
   document.getElementById('new-unit-name').value = '';
+  document.getElementById('new-unit-fab').value = '';
+  document.getElementById('new-unit-location').value = '';
   await loadAllUnits();
   renderUnitList();
   loadProjectList();
