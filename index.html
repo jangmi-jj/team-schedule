@@ -306,11 +306,8 @@
     <div id="project-list"><div class="loading">불러오는 중...</div></div>
     <div class="add-box">
       <h4>➕ 새 프로젝트 추가</h4>
-      <div class="form-group"><label>프로젝트 이름</label><input id="new-pjt-name" type="text" placeholder="프로젝트 이름" /></div>
-      <div class="form-group">
-        <label>색상</label>
-        <div class="color-picker" id="color-picker"></div>
-      </div>
+      <div class="form-group"><label>프로젝트 이름</label><input id="new-pjt-name" type="text" placeholder="프로젝트 이름" onkeydown="if(event.key==='Enter')addProject()" /></div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:12px">💡 색상은 진척률에 따라 자동으로 바뀌어요</p>
       <button class="btn btn-primary" onclick="addProject()">추가</button>
       <p id="pjt-msg" style="margin-top:8px;font-size:13px"></p>
     </div>
@@ -356,7 +353,24 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // 단계별 진척률
 const STAGE_PROGRESS = [0, 0, 10, 25, 35, 45, 55, 70, 90, 100];
 const STAGE_NAMES = ['','납품/정위치','다이크/지진브라켓','유틸리티 턴온','전기 턴온','인터락테스트','설비안정화 및 구동','셋업평가','셋업보고서 송부','종료'];
-const COLORS = ['#4F46E5','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#EC4899','#64748B'];
+
+// 진척률 기준 색상
+function getProgressColor(pct) {
+  if (pct === 0)   return '#94A3B8'; // 회색 - 시작 전
+  if (pct <= 25)   return '#3B82F6'; // 파랑 - 초기
+  if (pct <= 55)   return '#F59E0B'; // 주황 - 진행 중
+  if (pct < 100)   return '#8B5CF6'; // 보라 - 후반
+  return '#10B981';                  // 초록 - 완료
+}
+function getProgressLabel(pct) {
+  if (pct === 0)  return '시작 전';
+  if (pct <= 25)  return '초기';
+  if (pct <= 55)  return '진행 중';
+  if (pct < 100)  return '후반';
+  return '완료';
+}
+
+let projectProgressMap = {}; // { project_id: pct }
 
 let sb, currentUser, currentUserName = '';
 let projects = [];
@@ -482,32 +496,65 @@ function loadProjectList() {
   if (!projects.length) { el.innerHTML = '<p class="log-empty">등록된 프로젝트가 없어요</p>'; return; }
   el.innerHTML = projects.map(p=>{
     const units = unitsByProject[p.id] || [];
+    const pct = projectProgressMap[p.id] || 0;
+    const color = getProgressColor(pct);
     return `
-    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden">
+    <div id="pjt-item-${p.id}" style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;overflow:hidden">
       <div class="project-item" style="border-radius:0;border:none;border-bottom:${units.length?'1px solid var(--border)':'none'}">
         <div class="project-item-left">
-          <div style="width:12px;height:12px;border-radius:50%;background:${p.color};flex-shrink:0"></div>
-          <div>
+          <div style="width:12px;height:12px;border-radius:50%;background:${color};flex-shrink:0"></div>
+          <div style="flex:1;min-width:0">
             <div class="project-item-name">${escHtml(p.name)}</div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">호기 ${units.length}개</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">
+              <span style="color:${color};font-weight:700">${pct}%</span> · 호기 ${units.length}개
+            </div>
           </div>
         </div>
         <div class="project-item-actions">
-          <button class="btn btn-sm btn-outline" onclick="openUnitModal('${p.id}','${escHtml(p.name)}')">⚙️ 호기 관리</button>
+          <button class="btn btn-sm btn-outline" onclick="startEditProject('${p.id}','${escHtml(p.name)}')">수정</button>
+          <button class="btn btn-sm btn-outline" onclick="openUnitModal('${p.id}','${escHtml(p.name)}')">호기</button>
           <button class="btn btn-sm btn-danger" onclick="confirmDeleteProject('${p.id}','${escHtml(p.name)}')">삭제</button>
         </div>
       </div>
       ${units.length ? `<div style="padding:8px 16px;display:flex;flex-wrap:wrap;gap:6px">
-        ${units.map(u=>`<span style="font-size:11px;background:${p.color}15;color:${p.color};padding:3px 10px;border-radius:20px;font-weight:600">${escHtml(u.name)}</span>`).join('')}
+        ${units.map(u=>`<span style="font-size:11px;background:${color}20;color:${color};padding:3px 10px;border-radius:20px;font-weight:600">${escHtml(u.name)}</span>`).join('')}
       </div>` : ''}
     </div>`;
   }).join('');
 }
 
+function startEditProject(id, currentName) {
+  const item = document.getElementById('pjt-item-'+id);
+  if (!item) return;
+  const nameEl = item.querySelector('.project-item-name');
+  if (!nameEl) return;
+  const orig = nameEl.outerHTML;
+  nameEl.outerHTML = `
+    <div style="display:flex;gap:6px;align-items:center;flex:1">
+      <input id="edit-pjt-${id}" type="text" value="${currentName}"
+        style="flex:1;padding:5px 10px;border:1.5px solid var(--primary);border-radius:8px;font-size:13px"
+        onkeydown="if(event.key==='Enter')saveEditProject('${id}')" />
+      <button onclick="saveEditProject('${id}')"
+        style="padding:5px 10px;border-radius:7px;border:none;background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">저장</button>
+      <button onclick="loadProjectList()"
+        style="padding:5px 8px;border-radius:7px;border:1px solid var(--border);background:#fff;font-size:12px;cursor:pointer">취소</button>
+    </div>`;
+  document.getElementById('edit-pjt-'+id)?.focus();
+}
+
+async function saveEditProject(id) {
+  const input = document.getElementById('edit-pjt-'+id);
+  const name = input?.value.trim();
+  if (!name) return;
+  const {error} = await sb.from('projects').update({name}).eq('id',id);
+  if (error) { alert('수정 실패: '+error.message); return; }
+  await loadProjects();
+}
+
 async function addProject() {
   const name = document.getElementById('new-pjt-name').value.trim();
   if (!name) { showMsg('pjt-msg','이름을 입력해 주세요',false); return; }
-  const {error} = await sb.from('projects').insert({name,color:selectedColor});
+  const {error} = await sb.from('projects').insert({name, color:'#94A3B8'});
   if (error) { showMsg('pjt-msg','추가 실패: '+error.message,false); return; }
   document.getElementById('new-pjt-name').value = '';
   showMsg('pjt-msg','추가됐어요!',true);
@@ -655,6 +702,10 @@ async function loadStatus() {
     pct: STAGE_PROGRESS[maxStageMap[p.id] || 0] || 0,
   }));
 
+  // 전역 진척률 맵 업데이트
+  projectProgressMap = {};
+  statusData.forEach(p => { projectProgressMap[p.id] = p.pct; });
+
   filterStatus();
 }
 
@@ -673,17 +724,21 @@ function filterStatus() {
   el.innerHTML = list.map(p => {
     const stageName = p.stage ? `${p.stage}단계 - ${STAGE_NAMES[p.stage]}` : '시작 전';
     const units = unitsByProject[p.id] || [];
+    const color = getProgressColor(p.pct);
+    const statusLabel = getProgressLabel(p.pct);
     return `
     <div class="pjt-card" onclick="togglePjtCard('${p.id}',this)">
       <div class="pjt-card-header">
-        <div class="pjt-dot" style="background:${p.color}"></div>
+        <div class="pjt-dot" style="background:${color}"></div>
         <div class="pjt-info">
           <div class="pjt-name">${escHtml(p.name)}</div>
           <div class="pjt-progress-wrap">
-            <div class="pjt-bar-wrap"><div class="pjt-bar-fill" style="width:${p.pct}%;background:${p.color}"></div></div>
-            <div class="pjt-pct">${p.pct}%</div>
+            <div class="pjt-bar-wrap"><div class="pjt-bar-fill" style="width:${p.pct}%;background:${color}"></div></div>
+            <div class="pjt-pct" style="color:${color}">${p.pct}%</div>
           </div>
-          <div class="pjt-stage-label">${stageName} · 호기 ${units.length}개</div>
+          <div class="pjt-stage-label">${stageName} · 호기 ${units.length}개
+            <span style="margin-left:6px;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:${color}20;color:${color}">${statusLabel}</span>
+          </div>
         </div>
         <div class="pjt-arrow">▼</div>
       </div>
