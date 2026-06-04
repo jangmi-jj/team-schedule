@@ -378,7 +378,7 @@ let allUnits = []; // 전체 호기 목록
 let unitsByProject = {}; // { project_id: [units] }
 let statusData = []; // PJT 현황 렌더링용 데이터
 let currentUnitProjectId = null; // 호기 관리 모달용
-let selectedColor = COLORS[0];
+let selectedColor = '#94A3B8';
 let calYear, calMonth, selectedDate = '';
 let calTodoData = {};
 let calLogDates = new Set();
@@ -436,7 +436,6 @@ async function onLoggedIn(user) {
   calYear = now.getFullYear(); calMonth = now.getMonth();
   selectedDate = toDateStr(now);
 
-  initColorPicker();
   await loadProjects();
   await loadAllUnits();
   await loadMyRecentLogs();
@@ -1173,16 +1172,7 @@ async function deleteUnit(unitId) {
 }
 
 // ── 색상 선택기 ──
-function initColorPicker() {
-  document.getElementById('color-picker').innerHTML = COLORS.map(c=>
-    `<div class="color-swatch ${c===selectedColor?'selected':''}" style="background:${c}" onclick="selectColor('${c}',this)"></div>`
-  ).join('');
-}
-function selectColor(c, el) {
-  selectedColor = c;
-  document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));
-  el.classList.add('selected');
-}
+// 색상 선택기 제거됨 (진척률 기준 자동 색상)
 
 // ── 모달 ──
 let _modalCallback = null;
