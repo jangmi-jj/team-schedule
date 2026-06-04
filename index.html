@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>팀 일정 관리</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #4F46E5; --primary-light: #EEF2FF;
+      --danger: #EF4444; --success: #10B981; --warning: #F59E0B;
+      --bg: #F8FAFC; --card: #FFFFFF;
+      --text: #1E293B; --muted: #94A3B8; --border: #E2E8F0;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .hidden { display: none !important; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 18px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: #4338CA; }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-outline { background: transparent; color: var(--primary); border: 1.5px solid var(--primary); }
+    .btn-outline:hover { background: var(--primary-light); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+    .btn-full { width: 100%; }
+    input, select, textarea { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 10px; font-size: 14px; background: #fff; color: var(--text); transition: border-color .15s; outline: none; }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+    textarea { resize: vertical; min-height: 80px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .form-group { margin-bottom: 14px; }
+    .card { background: var(--card); border-radius: 16px; border: 1px solid var(--border); padding: 20px; }
+    .error-msg { color: var(--danger); font-size: 13px; margin-top: 8px; }
+    .success-msg { color: var(--success); font-size: 13px; margin-top: 8px; }
+
+    /* 로그인 */
+    #login-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+    .login-box { width: 100%; max-width: 400px; }
+    .login-box h1 { font-size: 24px; font-weight: 800; margin-bottom: 4px; }
+    .login-box .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
+    .login-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+    .login-tabs button { flex: 1; padding: 10px; border-radius: 10px; border: 1.5px solid var(--border); background: transparent; font-size: 14px; font-weight: 600; cursor: pointer; color: var(--muted); transition: all .15s; }
+    .login-tabs button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* 앱 레이아웃 */
+    #app-screen { display: flex; flex-direction: column; min-height: 100vh; }
+    .app-header { background: var(--card); border-bottom: 1px solid var(--border); padding: 13px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .app-header h2 { font-size: 17px; font-weight: 800; }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .user-chip { font-size: 12px; background: var(--primary-light); color: var(--primary); padding: 4px 10px; border-radius: 20px; font-weight: 700; }
+    .tab-nav { display: flex; background: var(--card); border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .tab-nav button { flex: 1; min-width: 90px; padding: 13px 8px; border: none; background: transparent; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2.5px solid transparent; transition: all .15s; white-space: nowrap; }
+    .tab-nav button.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .tab-content { flex: 1; padding: 18px; max-width: 760px; width: 100%; margin: 0 auto; }
+
+    /* 섹션 헤더 */
+    .section-title { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+
+    /* 작업 입력 */
+    .stage-select option { font-weight: 600; }
+    .progress-preview { margin-top: 8px; }
+    .progress-bar-wrap { background: var(--border); border-radius: 99px; height: 8px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; border-radius: 99px; background: var(--primary); transition: width .4s; }
+    .progress-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    /* 작업 카드 */
+    .log-card { background: #fff; border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+    .log-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+    .log-card-left { display: flex; flex-direction: column; gap: 4px; }
+    .log-badge { display: inline-flex; align-items: center; gap: 6px; }
+    .stage-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: var(--primary-light); color: var(--primary); }
+    .issue-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: #FEF3C7; color: #D97706; }
+    .log-meta { font-size: 11px; color: var(--muted); }
+    .log-content-text { font-size: 13px; line-height: 1.6; margin-bottom: 6px; }
+    .log-issue-text { font-size: 12px; color: #D97706; background: #FEF9EE; padding: 6px 10px; border-radius: 8px; line-height: 1.5; }
+    .log-detail-row { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+    .log-empty { color: var(--muted); font-size: 13px; text-align: center; padding: 30px 0; }
+
+    /* PJT 현황 */
+    .pjt-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; margin-bottom: 12px; overflow: hidden; cursor: pointer; transition: box-shadow .15s; }
+    .pjt-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.08); }
+    .pjt-card-header { padding: 16px; display: flex; align-items: center; gap: 12px; }
+    .pjt-dot { width: 14px; height: 14px; border-radius: 50%; flex-shrink: 0; }
+    .pjt-info { flex: 1; min-width: 0; }
+    .pjt-name { font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px; }
+    .pjt-progress-wrap { display: flex; align-items: center; gap: 10px; }
+    .pjt-bar-wrap { flex: 1; background: var(--border); border-radius: 99px; height: 7px; overflow: hidden; }
+    .pjt-bar-fill { height: 100%; border-radius: 99px; transition: width .4s; }
+    .pjt-pct { font-size: 12px; font-weight: 700; color: var(--primary); min-width: 32px; text-align: right; }
+    .pjt-stage-label { font-size: 11px; color: var(--muted); margin-top: 4px; }
+    .pjt-arrow { font-size: 14px; color: var(--muted); }
+    .pjt-history { display: none; border-top: 1px solid var(--border); padding: 14px; background: #FAFAFA; }
+    .pjt-history.open { display: block; }
+    .history-item { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: #fff; margin-bottom: 8px; }
+    .history-item-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .history-author { font-size: 12px; font-weight: 700; color: var(--primary); }
+    .history-date { font-size: 11px; color: var(--muted); }
+    .history-stage { font-size: 11px; font-weight: 700; background: var(--primary-light); color: var(--primary); padding: 2px 7px; border-radius: 5px; margin-bottom: 6px; display: inline-block; }
+    .history-content { font-size: 13px; line-height: 1.5; }
+    .history-issue { font-size: 12px; color: #D97706; background: #FEF9EE; padding: 5px 9px; border-radius: 7px; margin-top: 5px; }
+
+    /* 캘린더 */
+    .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .cal-nav h3 { font-size: 16px; font-weight: 800; }
+    .cal-nav button { padding: 6px 14px; border-radius: 8px; border: 1.5px solid var(--border); background: #fff; cursor: pointer; font-size: 16px; }
+    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 20px; }
+    .cal-dow { text-align: center; font-size: 11px; font-weight: 700; color: var(--muted); padding: 4px 0; }
+    .cal-day { text-align: center; padding: 6px 2px; border-radius: 10px; cursor: pointer; font-size: 13px; min-height: 44px; display: flex; flex-direction: column; align-items: center; gap: 3px; transition: background .1s; }
+    .cal-day:hover { background: var(--primary-light); }
+    .cal-day.today { background: var(--primary); color: #fff; font-weight: 700; }
+    .cal-day.today:hover { background: #4338CA; }
+    .cal-day.selected { background: var(--primary-light); outline: 2px solid var(--primary); font-weight: 700; }
+    .cal-day.other-month { color: var(--muted); }
+    .cal-day.sunday { color: #EF4444; }
+    .cal-day.sunday.today { color: #fff; }
+    .cal-dots { display: flex; gap: 2px; justify-content: center; flex-wrap: wrap; }
+    .cal-dot { width: 5px; height: 5px; border-radius: 50%; }
+    .cal-day.today .cal-dot { opacity: .8; }
+
+    /* 할일 패널 */
+    .todo-panel { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .todo-panel-header { font-size: 14px; font-weight: 700; margin-bottom: 14px; color: var(--primary); }
+    .todo-input-row { display: flex; gap: 8px; margin-bottom: 12px; }
+    .todo-input-row input { flex: 1; }
+    .todo-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
+    .todo-item:last-child { border-bottom: none; }
+    .todo-check { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--border); cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 1px; transition: all .15s; }
+    .todo-check.done { background: var(--success); border-color: var(--success); color: #fff; }
+    .todo-text { flex: 1; font-size: 13px; line-height: 1.5; }
+    .todo-text.done { text-decoration: line-through; color: var(--muted); }
+    .todo-due { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .todo-del { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 14px; padding: 2px; }
+
+    /* PJT 관리 */
+    .project-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: #fff; margin-bottom: 8px; cursor: pointer; transition: box-shadow .15s; }
+    .project-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+    .project-item-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+    .project-item-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .project-item-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .add-box { border: 2px dashed var(--border); border-radius: 12px; padding: 16px; margin-top: 16px; }
+    .add-box h4 { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+    .color-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 3px solid transparent; transition: all .15s; }
+    .color-swatch.selected { border-color: var(--text); transform: scale(1.1); }
+
+    /* 모달 */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 20px; }
+    .modal-box { background: #fff; border-radius: 16px; padding: 24px; width: 100%; max-width: 400px; max-height: 90vh; overflow-y: auto; }
+    .modal-box h3 { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .modal-actions .btn { flex: 1; }
+
+    .loading { text-align: center; padding: 30px; color: var(--muted); font-size: 13px; }
+    @media (min-width: 600px) { .tab-content { padding: 24px; } }
+  </style>
+</head>
+<body>
+
+<!-- 로그인 -->
+<div id="login-screen" class="hidden">
+  <div class="login-box card">
+    <h1>📋 팀 일정 관리</h1>
+    <p class="sub">프로젝트별 작업을 함께 기록해요</p>
+    <div class="login-tabs">
+      <button class="active" onclick="switchLoginTab('signin')">로그인</button>
+      <button onclick="switchLoginTab('signup')">회원가입</button>
+    </div>
+    <div id="signin-form">
+      <div class="form-group"><label>이메일</label><input id="si-email" type="email" placeholder="이메일" /></div>
+      <div class="form-group"><label>비밀번호</label><input id="si-pw" type="password" placeholder="비밀번호" onkeydown="if(event.key==='Enter')signIn()" /></div>
+      <button class="btn btn-primary btn-full" onclick="signIn()">로그인</button>
+    </div>
+    <div id="signup-form" class="hidden">
+      <div class="form-group"><label>이름</label><input id="su-name" type="text" placeholder="팀에서 사용할 이름" /></div>
+      <div class="form-group"><label>이메일</label><input id="su-email" type="email" placeholder="이메일" /></div>
+      <div class="form-group"><label>비밀번호</label><input id="su-pw" type="password" placeholder="6자리 이상" /></div>
+      <button class="btn btn-primary btn-full" onclick="signUp()">회원가입</button>
+    </div>
+    <p id="auth-error" class="error-msg"></p>
+    <p id="auth-success" class="success-msg"></p>
+  </div>
+</div>
+
+<!-- 앱 -->
+<div id="app-screen" class="hidden">
+  <div class="app-header">
+    <h2>📋 팀 일정 관리</h2>
+    <div class="header-right">
+      <span class="user-chip" id="header-user"></span>
+      <button class="btn btn-outline btn-sm" onclick="signOut()">로그아웃</button>
+    </div>
+  </div>
+  <div class="tab-nav">
+    <button class="active" onclick="switchTab('input')">✍️ 작업 입력</button>
+    <button onclick="switchTab('status')">📊 PJT 현황</button>
+    <button onclick="switchTab('calendar')">📅 캘린더</button>
+    <button onclick="switchTab('projects')">🗂 PJT 관리</button>
+  </div>
+
+  <!-- 탭1: 작업 입력 -->
+  <div id="tab-input" class="tab-content">
+    <div class="card" style="margin-bottom:20px">
+      <div class="section-title">오늘 작업 내용 입력</div>
+      <div class="form-group">
+        <label>작업자</label>
+        <input id="log-author" type="text" readonly style="background:#F8FAFC;color:var(--muted)" />
+      </div>
+      <div class="form-group">
+        <label>프로젝트 선택</label>
+        <select id="log-project"></select>
+      </div>
+      <div class="form-group">
+        <label>설비 위치 및 설비명</label>
+        <input id="log-equipment" type="text" placeholder="예: Clean Room A-3 / IFM-70" />
+      </div>
+      <div class="form-group">
+        <label>작업 단계</label>
+        <select id="log-stage" onchange="updateProgressPreview()">
+          <option value="">단계 선택</option>
+          <option value="1">1단계 - 납품/정위치</option>
+          <option value="2">2단계 - 다이크/지진브라켓</option>
+          <option value="3">3단계 - 유틸리티 턴온</option>
+          <option value="4">4단계 - 전기 턴온</option>
+          <option value="5">5단계 - 인터락테스트</option>
+          <option value="6">6단계 - 설비안정화 및 구동</option>
+          <option value="7">7단계 - 셋업평가</option>
+          <option value="8">8단계 - 셋업보고서 송부</option>
+          <option value="9">9단계 - 종료</option>
+        </select>
+        <div class="progress-preview" id="progress-preview" style="display:none">
+          <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
+          <div class="progress-label" id="progress-label"></div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>작업 내용</label>
+        <textarea id="log-content" placeholder="오늘 수행한 작업 내용을 입력해 주세요"></textarea>
+      </div>
+      <div class="form-group">
+        <label>고객 담당자</label>
+        <input id="log-customer" type="text" placeholder="고객사 담당자 이름" />
+      </div>
+      <div class="form-group">
+        <label>이슈사항 <span style="font-weight:400;color:var(--muted)">(없으면 비워두세요)</span></label>
+        <textarea id="log-issue" placeholder="작업 중 발생한 이슈를 입력해 주세요" style="min-height:60px"></textarea>
+      </div>
+      <div class="form-group">
+        <label>날짜</label>
+        <input type="date" id="log-date" />
+      </div>
+      <button class="btn btn-primary btn-full" onclick="submitLog()">작업 내용 저장</button>
+      <p id="log-msg" style="margin-top:8px;font-size:13px"></p>
+    </div>
+
+    <div class="section-title">내 최근 작업</div>
+    <div id="my-recent-logs"><div class="loading">불러오는 중...</div></div>
+  </div>
+
+  <!-- 탭2: PJT 현황 -->
+  <div id="tab-status" class="tab-content hidden">
+    <div class="section-title">프로젝트별 진행 현황</div>
+    <div id="status-list"><div class="loading">불러오는 중...</div></div>
+  </div>
+
+  <!-- 탭3: 캘린더 -->
+  <div id="tab-calendar" class="tab-content hidden">
+    <div class="cal-nav">
+      <button onclick="changeMonth(-1)">◀</button>
+      <h3 id="cal-title"></h3>
+      <button onclick="changeMonth(1)">▶</button>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
+    <div id="todo-panel" class="hidden"></div>
+  </div>
+
+  <!-- 탭4: PJT 관리 -->
+  <div id="tab-projects" class="tab-content hidden">
+    <div class="section-title">프로젝트 목록</div>
+    <div id="project-list"><div class="loading">불러오는 중...</div></div>
+    <div class="add-box">
+      <h4>➕ 새 프로젝트 추가</h4>
+      <div class="form-group"><label>프로젝트 이름</label><input id="new-pjt-name" type="text" placeholder="프로젝트 이름" /></div>
+      <div class="form-group">
+        <label>색상</label>
+        <div class="color-picker" id="color-picker"></div>
+      </div>
+      <button class="btn btn-primary" onclick="addProject()">추가</button>
+      <p id="pjt-msg" style="margin-top:8px;font-size:13px"></p>
+    </div>
+  </div>
+</div>
+
+<!-- 삭제 확인 모달 -->
+<div id="confirm-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3 id="modal-title"></h3>
+    <p id="modal-body" style="font-size:13px;color:var(--muted)"></p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">취소</button>
+      <button class="btn btn-danger" id="modal-confirm-btn">삭제</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════
+//  ★ Supabase 설정
+// ══════════════════════════════════════
+const SUPABASE_URL = 'https://lgcgmgqnmbntmwyhqidr.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY2dtZ3FubWJudG13eWhxaWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDgzNTYsImV4cCI6MjA5NjA4NDM1Nn0.6hvhHEECTOuZROlXR0g4tV58Ifbt_DeSr4IQBb2zZz0';
+// ══════════════════════════════════════
+
+// 단계별 진척률
+const STAGE_PROGRESS = [0, 0, 10, 25, 35, 45, 55, 70, 90, 100];
+const STAGE_NAMES = ['','납품/정위치','다이크/지진브라켓','유틸리티 턴온','전기 턴온','인터락테스트','설비안정화 및 구동','셋업평가','셋업보고서 송부','종료'];
+const COLORS = ['#4F46E5','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#EC4899','#64748B'];
+
+let sb, currentUser, currentUserName = '';
+let projects = [];
+let selectedColor = COLORS[0];
+let calYear, calMonth, selectedDate = '';
+let calTodoData = {}; // { 'YYYY-MM-DD': [todos] }
+let calLogDates = new Set();
+
+function show(id) { document.getElementById(id).classList.remove('hidden'); }
+function hide(id) { document.getElementById(id).classList.add('hidden'); }
+
+// ── 인증 ──
+function switchLoginTab(tab) {
+  document.querySelectorAll('.login-tabs button').forEach((b,i) => b.classList.toggle('active', tab==='signin'?i===0:i===1));
+  document.getElementById('signin-form').classList.toggle('hidden', tab!=='signin');
+  document.getElementById('signup-form').classList.toggle('hidden', tab!=='signup');
+  document.getElementById('auth-error').textContent = '';
+  document.getElementById('auth-success').textContent = '';
+}
+
+async function signIn() {
+  const email = document.getElementById('si-email').value.trim();
+  const pw = document.getElementById('si-pw').value;
+  if (!email||!pw) { setAuthErr('이메일과 비밀번호를 입력해 주세요'); return; }
+  const {data,error} = await sb.auth.signInWithPassword({email,password:pw});
+  if (error) { setAuthErr('로그인 실패: '+error.message); return; }
+  await onLoggedIn(data.user);
+}
+
+async function signUp() {
+  const name = document.getElementById('su-name').value.trim();
+  const email = document.getElementById('su-email').value.trim();
+  const pw = document.getElementById('su-pw').value;
+  if (!name||!email||!pw) { setAuthErr('모든 항목을 입력해 주세요'); return; }
+  if (pw.length<6) { setAuthErr('비밀번호는 6자리 이상이어야 해요'); return; }
+  const {data,error} = await sb.auth.signUp({email,password:pw});
+  if (error) { setAuthErr('회원가입 실패: '+error.message); return; }
+  if (data.user) {
+    await sb.from('profiles').upsert({id:data.user.id,name});
+    document.getElementById('auth-success').textContent = '회원가입 완료! 로그인해 주세요.';
+  }
+}
+
+async function signOut() { await sb.auth.signOut(); location.reload(); }
+function setAuthErr(msg) { document.getElementById('auth-error').textContent = msg; }
+
+async function onLoggedIn(user) {
+  currentUser = user;
+  const {data:p} = await sb.from('profiles').select('name').eq('id',user.id).single();
+  currentUserName = p?.name || user.email.split('@')[0];
+
+  hide('login-screen'); show('app-screen');
+  document.getElementById('header-user').textContent = currentUserName;
+  document.getElementById('log-author').value = currentUserName;
+  document.getElementById('log-date').value = toDateStr(new Date());
+
+  const now = new Date();
+  calYear = now.getFullYear(); calMonth = now.getMonth();
+  selectedDate = toDateStr(now);
+
+  initColorPicker();
+  await loadProjects();
+  await loadMyRecentLogs();
+}
+
+// ── 탭 ──
+function switchTab(tab) {
+  ['input','status','calendar','projects'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('hidden', t!==tab);
+  });
+  document.querySelectorAll('.tab-nav button').forEach((b,i) => {
+    b.classList.toggle('active', ['input','status','calendar','projects'][i]===tab);
+  });
+  if (tab==='status') loadStatus();
+  if (tab==='calendar') { loadCalendar(); }
+  if (tab==='projects') loadProjectList();
+  if (tab==='input') { loadProjectSelect(); loadMyRecentLogs(); }
+}
+
+// ── 프로젝트 ──
+async function loadProjects() {
+  const {data} = await sb.from('projects').select('*').order('created_at');
+  projects = data || [];
+  loadProjectSelect();
+  loadProjectList();
+}
+
+function loadProjectSelect() {
+  const sel = document.getElementById('log-project');
+  sel.innerHTML = projects.length
+    ? projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')
+    : '<option disabled>프로젝트를 먼저 추가해 주세요</option>';
+}
+
+function loadProjectList() {
+  const el = document.getElementById('project-list');
+  if (!projects.length) { el.innerHTML = '<p class="log-empty">등록된 프로젝트가 없어요</p>'; return; }
+  el.innerHTML = projects.map(p=>`
+    <div class="project-item" onclick="viewProjectHistory('${p.id}','${escHtml(p.name)}','${p.color}')">
+      <div class="project-item-left">
+        <div style="width:12px;height:12px;border-radius:50%;background:${p.color};flex-shrink:0"></div>
+        <div class="project-item-name">${escHtml(p.name)}</div>
+      </div>
+      <div class="project-item-actions">
+        <button class="btn btn-sm btn-outline" onclick="event.stopPropagation();viewProjectHistory('${p.id}','${escHtml(p.name)}','${p.color}')">히스토리</button>
+        <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();confirmDeleteProject('${p.id}','${escHtml(p.name)}')">삭제</button>
+      </div>
+    </div>`).join('');
+}
+
+async function addProject() {
+  const name = document.getElementById('new-pjt-name').value.trim();
+  if (!name) { showMsg('pjt-msg','이름을 입력해 주세요',false); return; }
+  const {error} = await sb.from('projects').insert({name,color:selectedColor});
+  if (error) { showMsg('pjt-msg','추가 실패: '+error.message,false); return; }
+  document.getElementById('new-pjt-name').value = '';
+  showMsg('pjt-msg','추가됐어요!',true);
+  await loadProjects();
+}
+
+function confirmDeleteProject(id,name) {
+  showModal('프로젝트 삭제',`"${name}" 프로젝트와 모든 작업 기록이 삭제돼요.`, async ()=>{
+    await sb.from('projects').delete().eq('id',id);
+    closeModal(); await loadProjects();
+  });
+}
+
+async function viewProjectHistory(id, name, color) {
+  // 히스토리 모달
+  const modal = document.getElementById('confirm-modal');
+  const box = modal.querySelector('.modal-box');
+  box.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <div style="width:14px;height:14px;border-radius:50%;background:${color}"></div>
+      <h3 style="flex:1;font-size:15px;font-weight:700;margin:0">${escHtml(name)}</h3>
+      <button onclick="closeModal()" style="background:none;border:none;cursor:pointer;font-size:20px;color:var(--muted)">✕</button>
+    </div>
+    <div id="history-content"><div class="loading">불러오는 중...</div></div>
+  `;
+  modal.classList.remove('hidden');
+
+  const {data} = await sb.from('work_logs')
+    .select('*')
+    .eq('project_id',id)
+    .order('log_date',{ascending:false})
+    .order('created_at',{ascending:false});
+
+  const el = document.getElementById('history-content');
+  if (!data||!data.length) { el.innerHTML='<p class="log-empty">아직 작업 기록이 없어요</p>'; return; }
+
+  el.innerHTML = data.map(log=>`
+    <div class="history-item">
+      <div class="history-item-header">
+        <span class="history-author">${escHtml(log.author_name||'')}</span>
+        <span class="history-date">${log.log_date}</span>
+      </div>
+      ${log.stage ? `<span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)</span>` : ''}
+      ${log.equipment ? `<div style="font-size:11px;color:var(--muted);margin-bottom:4px">📍 ${escHtml(log.equipment)}</div>` : ''}
+      <div class="history-content">${escHtml(log.content)}</div>
+      ${log.issue ? `<div class="history-issue">⚠️ ${escHtml(log.issue)}</div>` : ''}
+      ${log.customer_manager ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">👤 고객담당자: ${escHtml(log.customer_manager)}</div>` : ''}
+    </div>`).join('');
+}
+
+// ── 작업 로그 ──
+function updateProgressPreview() {
+  const stage = parseInt(document.getElementById('log-stage').value);
+  const preview = document.getElementById('progress-preview');
+  if (!stage) { preview.style.display='none'; return; }
+  preview.style.display='block';
+  const pct = STAGE_PROGRESS[stage];
+  document.getElementById('progress-bar').style.width = pct+'%';
+  document.getElementById('progress-label').textContent = `${STAGE_NAMES[stage]} → 진척률 ${pct}%`;
+}
+
+async function submitLog() {
+  const projectId = document.getElementById('log-project').value;
+  const equipment = document.getElementById('log-equipment').value.trim();
+  const stage = parseInt(document.getElementById('log-stage').value) || 0;
+  const content = document.getElementById('log-content').value.trim();
+  const customer = document.getElementById('log-customer').value.trim();
+  const issue = document.getElementById('log-issue').value.trim();
+  const date = document.getElementById('log-date').value;
+
+  if (!projectId) { showMsg('log-msg','프로젝트를 선택해 주세요',false); return; }
+  if (!content) { showMsg('log-msg','작업 내용을 입력해 주세요',false); return; }
+
+  const {error} = await sb.from('work_logs').insert({
+    project_id:projectId, user_id:currentUser.id,
+    author_name:currentUserName, content, log_date:date,
+    equipment, stage, customer_manager:customer, issue,
+  });
+  if (error) { showMsg('log-msg','저장 실패: '+error.message,false); return; }
+
+  document.getElementById('log-content').value='';
+  document.getElementById('log-issue').value='';
+  document.getElementById('log-equipment').value='';
+  document.getElementById('log-customer').value='';
+  document.getElementById('log-stage').value='';
+  document.getElementById('progress-preview').style.display='none';
+  showMsg('log-msg','저장됐어요! ✓',true);
+  await loadMyRecentLogs();
+}
+
+async function loadMyRecentLogs() {
+  const el = document.getElementById('my-recent-logs');
+  const {data} = await sb.from('work_logs')
+    .select('*, projects(name,color)')
+    .eq('user_id',currentUser.id)
+    .order('created_at',{ascending:false})
+    .limit(15);
+
+  if (!data||!data.length) { el.innerHTML='<p class="log-empty">아직 작업 내용이 없어요</p>'; return; }
+  el.innerHTML = data.map(log=>`
+    <div class="log-card">
+      <div class="log-card-header">
+        <div class="log-card-left">
+          <div class="log-badge">
+            <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${log.projects?.color}20;color:${log.projects?.color}">${escHtml(log.projects?.name||'')}</span>
+            ${log.stage?`<span class="stage-badge">${log.stage}단계</span>`:''}
+            ${log.issue?`<span class="issue-badge">⚠️ 이슈</span>`:''}
+          </div>
+          <div class="log-meta">${log.log_date} · ${escHtml(log.author_name||'')}</div>
+        </div>
+        <button onclick="confirmDeleteLog('${log.id}')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px;padding:4px">✕</button>
+      </div>
+      ${log.equipment?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">📍 ${escHtml(log.equipment)}</div>`:''}
+      <div class="log-content-text">${escHtml(log.content)}</div>
+      ${log.issue?`<div class="log-issue-text">⚠️ ${escHtml(log.issue)}</div>`:''}
+      ${log.customer_manager?`<div class="log-detail-row"><span>👤 ${escHtml(log.customer_manager)}</span></div>`:''}
+    </div>`).join('');
+}
+
+function confirmDeleteLog(id) {
+  showModal('작업 삭제','이 작업 기록을 삭제할까요?', async ()=>{
+    await sb.from('work_logs').delete().eq('id',id);
+    closeModal(); await loadMyRecentLogs();
+  });
+}
+
+// ── PJT 현황 ──
+async function loadStatus() {
+  const el = document.getElementById('status-list');
+  el.innerHTML = '<div class="loading">불러오는 중...</div>';
+
+  const {data:logs} = await sb.from('work_logs').select('project_id,stage');
+  const maxStageMap = {};
+  (logs||[]).forEach(l => {
+    if (!l.stage) return;
+    if (!maxStageMap[l.project_id] || l.stage > maxStageMap[l.project_id]) {
+      maxStageMap[l.project_id] = l.stage;
+    }
+  });
+
+  if (!projects.length) { el.innerHTML='<p class="log-empty">등록된 프로젝트가 없어요</p>'; return; }
+
+  el.innerHTML = projects.map(p => {
+    const stage = maxStageMap[p.id] || 0;
+    const pct = STAGE_PROGRESS[stage] || 0;
+    const stageName = stage ? `${stage}단계 - ${STAGE_NAMES[stage]}` : '시작 전';
+    return `
+    <div class="pjt-card" onclick="toggleHistory('hist-${p.id}', this)">
+      <div class="pjt-card-header">
+        <div class="pjt-dot" style="background:${p.color}"></div>
+        <div class="pjt-info">
+          <div class="pjt-name">${escHtml(p.name)}</div>
+          <div class="pjt-progress-wrap">
+            <div class="pjt-bar-wrap">
+              <div class="pjt-bar-fill" style="width:${pct}%;background:${p.color}"></div>
+            </div>
+            <div class="pjt-pct">${pct}%</div>
+          </div>
+          <div class="pjt-stage-label">${stageName}</div>
+        </div>
+        <div class="pjt-arrow">▼</div>
+      </div>
+      <div class="pjt-history" id="hist-${p.id}">
+        <div class="loading" id="hist-load-${p.id}">클릭해서 히스토리 보기</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleHistory(histId, card) {
+  const panel = document.getElementById(histId);
+  const isOpen = panel.classList.contains('open');
+  panel.classList.toggle('open');
+  const arrow = card.querySelector('.pjt-arrow');
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
+
+  if (!isOpen) {
+    const projId = histId.replace('hist-','');
+    const loadEl = document.getElementById('hist-load-'+projId);
+    if (loadEl) loadEl.textContent = '불러오는 중...';
+
+    const {data} = await sb.from('work_logs')
+      .select('*')
+      .eq('project_id', projId)
+      .order('log_date',{ascending:false})
+      .order('created_at',{ascending:false})
+      .limit(20);
+
+    if (!data||!data.length) { panel.innerHTML='<p class="log-empty">작업 기록이 없어요</p>'; return; }
+    panel.innerHTML = data.map(log=>`
+      <div class="history-item">
+        <div class="history-item-header">
+          <span class="history-author">${escHtml(log.author_name||'')}</span>
+          <span class="history-date">${log.log_date}</span>
+        </div>
+        ${log.stage?`<span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)</span>`:''}
+        ${log.equipment?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">📍 ${escHtml(log.equipment)}</div>`:''}
+        <div class="history-content">${escHtml(log.content)}</div>
+        ${log.issue?`<div class="history-issue">⚠️ ${escHtml(log.issue)}</div>`:''}
+        ${log.customer_manager?`<div style="font-size:11px;color:var(--muted);margin-top:4px">👤 ${escHtml(log.customer_manager)}</div>`:''}
+      </div>`).join('');
+  }
+}
+
+// ── 캘린더 ──
+async function loadCalendar() {
+  await fetchCalendarData();
+  renderCalendar();
+  renderTodoPanel(selectedDate);
+}
+
+async function fetchCalendarData() {
+  const firstDay = `${calYear}-${String(calMonth+1).padStart(2,'0')}-01`;
+  const lastDay = new Date(calYear, calMonth+1, 0);
+  const lastDayStr = toDateStr(lastDay);
+
+  const {data:todos} = await sb.from('todos')
+    .select('*')
+    .gte('due_date', firstDay)
+    .lte('due_date', lastDayStr)
+    .order('due_date');
+
+  calTodoData = {};
+  (todos||[]).forEach(t => {
+    if (!calTodoData[t.due_date]) calTodoData[t.due_date] = [];
+    calTodoData[t.due_date].push(t);
+  });
+
+  const {data:logs} = await sb.from('work_logs')
+    .select('log_date')
+    .gte('log_date', firstDay)
+    .lte('log_date', lastDayStr);
+
+  calLogDates = new Set((logs||[]).map(l=>l.log_date));
+}
+
+function renderCalendar() {
+  document.getElementById('cal-title').textContent = `${calYear}년 ${calMonth+1}월`;
+  const grid = document.getElementById('cal-grid');
+  const dows = ['일','월','화','수','목','금','토'];
+  const today = toDateStr(new Date());
+
+  let html = dows.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+
+  const first = new Date(calYear, calMonth, 1);
+  const startDow = first.getDay();
+  const daysInMonth = new Date(calYear, calMonth+1, 0).getDate();
+  const prevDays = new Date(calYear, calMonth, 0).getDate();
+
+  for (let i=0; i<startDow; i++) {
+    const d = prevDays - startDow + 1 + i;
+    html += `<div class="cal-day other-month"><span>${d}</span></div>`;
+  }
+
+  for (let d=1; d<=daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday = dateStr===today;
+    const isSelected = dateStr===selectedDate;
+    const dow = (startDow + d - 1) % 7;
+    const isSun = dow===0;
+
+    let cls = 'cal-day';
+    if (isToday) cls+=' today';
+    else if (isSelected) cls+=' selected';
+    if (isSun) cls+=' sunday';
+
+    const hasTodos = calTodoData[dateStr]?.length > 0;
+    const hasLogs = calLogDates.has(dateStr);
+    const dots = [
+      hasTodos ? `<div class="cal-dot" style="background:#10B981"></div>` : '',
+      hasLogs ? `<div class="cal-dot" style="background:#4F46E5"></div>` : '',
+    ].join('');
+
+    html += `<div class="${cls}" onclick="selectCalDate('${dateStr}')">
+      <span>${d}</span>
+      ${dots?`<div class="cal-dots">${dots}</div>`:''}
+    </div>`;
+  }
+
+  const remain = (7 - (startDow + daysInMonth) % 7) % 7;
+  for (let i=1; i<=remain; i++) {
+    html += `<div class="cal-day other-month"><span>${i}</span></div>`;
+  }
+
+  grid.innerHTML = html;
+}
+
+function selectCalDate(dateStr) {
+  selectedDate = dateStr;
+  renderCalendar();
+  renderTodoPanel(dateStr);
+}
+
+async function renderTodoPanel(dateStr) {
+  const panel = document.getElementById('todo-panel');
+  panel.classList.remove('hidden');
+
+  const todos = calTodoData[dateStr] || [];
+  const logs = calLogDates.has(dateStr) ? '있음' : '';
+
+  panel.innerHTML = `
+    <div class="todo-panel">
+      <div class="todo-panel-header">📅 ${formatDateKo(dateStr)}</div>
+      <div class="todo-input-row">
+        <input id="todo-input" type="text" placeholder="할 일 추가..." onkeydown="if(event.key==='Enter')addTodo('${dateStr}')" />
+        <button class="btn btn-primary btn-sm" onclick="addTodo('${dateStr}')">추가</button>
+      </div>
+      <div id="todo-list">
+        ${todos.length===0
+          ? '<p style="font-size:13px;color:var(--muted);text-align:center;padding:12px 0">등록된 할 일이 없어요</p>'
+          : todos.map(t=>`
+            <div class="todo-item" id="todo-${t.id}">
+              <div class="todo-check ${t.is_done?'done':''}" onclick="toggleTodo('${t.id}','${dateStr}',${!t.is_done})">
+                ${t.is_done?'✓':''}
+              </div>
+              <div style="flex:1">
+                <div class="todo-text ${t.is_done?'done':''}">${escHtml(t.title)}</div>
+                <div class="todo-due">${escHtml(t.author_name||'')}</div>
+              </div>
+              <button class="todo-del" onclick="deleteTodo('${t.id}','${dateStr}')">✕</button>
+            </div>`).join('')
+        }
+      </div>
+      ${logs?`<div style="margin-top:12px;padding:8px 12px;background:var(--primary-light);border-radius:8px;font-size:12px;color:var(--primary)">📌 이 날 작업 기록이 있어요</div>`:''}
+    </div>`;
+}
+
+async function addTodo(dateStr) {
+  const input = document.getElementById('todo-input');
+  const title = input.value.trim();
+  if (!title) return;
+
+  const {error} = await sb.from('todos').insert({
+    title, due_date: dateStr,
+    user_id: currentUser.id, author_name: currentUserName,
+  });
+  if (error) { alert('추가 실패: '+error.message); return; }
+  input.value = '';
+  await fetchCalendarData();
+  renderCalendar();
+  renderTodoPanel(dateStr);
+}
+
+async function toggleTodo(id, dateStr, isDone) {
+  await sb.from('todos').update({is_done:isDone}).eq('id',id);
+  await fetchCalendarData();
+  renderCalendar();
+  renderTodoPanel(dateStr);
+}
+
+async function deleteTodo(id, dateStr) {
+  await sb.from('todos').delete().eq('id',id);
+  await fetchCalendarData();
+  renderCalendar();
+  renderTodoPanel(dateStr);
+}
+
+function changeMonth(delta) {
+  calMonth += delta;
+  if (calMonth > 11) { calMonth=0; calYear++; }
+  if (calMonth < 0) { calMonth=11; calYear--; }
+  loadCalendar();
+}
+
+// ── 색상 선택기 ──
+function initColorPicker() {
+  document.getElementById('color-picker').innerHTML = COLORS.map(c=>
+    `<div class="color-swatch ${c===selectedColor?'selected':''}" style="background:${c}" onclick="selectColor('${c}',this)"></div>`
+  ).join('');
+}
+function selectColor(c, el) {
+  selectedColor = c;
+  document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+// ── 모달 ──
+function showModal(title, body, cb) {
+  const modal = document.getElementById('confirm-modal');
+  modal.querySelector('.modal-box').innerHTML = `
+    <h3>${title}</h3>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px">${body}</p>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">취소</button>
+      <button class="btn btn-danger" onclick="(${cb.toString()})()">삭제</button>
+    </div>`;
+  modal.classList.remove('hidden');
+}
+function closeModal() { document.getElementById('confirm-modal').classList.add('hidden'); }
+
+// ── 유틸 ──
+function toDateStr(d) { return d.toISOString().split('T')[0]; }
+function formatDateKo(s) { const d=new Date(s+'T00:00:00'); return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일`; }
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function showMsg(id, msg, ok) {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.style.color = ok ? 'var(--success)' : 'var(--danger)';
+  setTimeout(()=>{ el.textContent=''; }, 3000);
+}
+
+// ── 시작 ──
+(async function init() {
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const {data:{session}} = await sb.auth.getSession();
+  if (session?.user) await onLoggedIn(session.user);
+  else show('login-screen');
+  sb.auth.onAuthStateChange((_e,session)=>{
+    if (!session && !document.getElementById('app-screen').classList.contains('hidden')) location.reload();
+  });
+})();
+</script>
+</body>
+</html>
