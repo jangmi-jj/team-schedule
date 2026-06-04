@@ -772,7 +772,11 @@ async function renderTodoPanel(dateStr) {
                 <div class="todo-text ${t.is_done?'done':''}">${escHtml(t.title)}</div>
                 <div class="todo-due">${escHtml(t.author_name||'')}</div>
               </div>
-              <button class="todo-del" onclick="deleteTodo('${t.id}','${dateStr}')">✕</button>
+              <div style="display:flex;gap:4px;flex-shrink:0">
+                <button onclick="startEditTodo('${t.id}','${dateStr}',\`${escHtml(t.title)}\`)"
+                  style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-size:11px;padding:3px 7px">수정</button>
+                <button class="todo-del" onclick="deleteTodo('${t.id}','${dateStr}')">✕</button>
+              </div>
             </div>`).join('')
         }
       </div>
@@ -809,6 +813,34 @@ async function deleteTodo(id, dateStr) {
   await fetchCalendarData();
   renderCalendar();
   renderTodoPanel(dateStr);
+  await loadWeeklyTodos();
+}
+
+function startEditTodo(id, dateStr, currentTitle) {
+  const item = document.getElementById('todo-'+id);
+  if (!item) return;
+  item.innerHTML = `
+    <div style="display:flex;gap:8px;width:100%;align-items:center">
+      <input id="edit-todo-${id}" type="text" value="${currentTitle}"
+        style="flex:1;padding:6px 10px;border:1.5px solid var(--primary);border-radius:8px;font-size:13px"
+        onkeydown="if(event.key==='Enter')saveEditTodo('${id}','${dateStr}')" />
+      <button onclick="saveEditTodo('${id}','${dateStr}')"
+        style="padding:6px 12px;border-radius:8px;border:none;background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer">저장</button>
+      <button onclick="renderTodoPanel('${dateStr}')"
+        style="padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:#fff;font-size:12px;cursor:pointer">취소</button>
+    </div>`;
+  document.getElementById('edit-todo-'+id)?.focus();
+}
+
+async function saveEditTodo(id, dateStr) {
+  const input = document.getElementById('edit-todo-'+id);
+  const title = input?.value.trim();
+  if (!title) return;
+  await sb.from('todos').update({title}).eq('id',id);
+  await fetchCalendarData();
+  renderCalendar();
+  renderTodoPanel(dateStr);
+  await loadWeeklyTodos();
 }
 
 function changeMonth(delta) {
