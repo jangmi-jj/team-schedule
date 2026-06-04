@@ -269,7 +269,25 @@
       <button onclick="changeMonth(1)">▶</button>
     </div>
     <div class="cal-grid" id="cal-grid"></div>
-    <div id="todo-panel" class="hidden"></div>
+    <div id="todo-panel" class="hidden" style="margin-bottom:20px"></div>
+
+    <!-- 미해결 이슈 리스트 -->
+    <div style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <span style="font-size:15px;font-weight:700">⚠️ 미해결 이슈</span>
+        <span id="issue-count" style="font-size:11px;background:#FEF3C7;color:#D97706;padding:2px 8px;border-radius:20px;font-weight:700"></span>
+      </div>
+      <div id="unresolved-issues"><div class="loading">불러오는 중...</div></div>
+    </div>
+
+    <!-- 주간 할일 리스트 -->
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:15px;font-weight:700">📋 이번 주 할 일</span>
+        <span id="week-range" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div id="weekly-todos"><div class="loading">불러오는 중...</div></div>
+    </div>
   </div>
 
   <!-- 탭4: PJT 관리 -->
@@ -320,6 +338,7 @@ let selectedColor = COLORS[0];
 let calYear, calMonth, selectedDate = '';
 let calTodoData = {}; // { 'YYYY-MM-DD': [todos] }
 let calLogDates = new Set();
+let calIssueDates = new Set(); // 미해결 이슈 있는 날
 
 function show(id) { document.getElementById(id).classList.remove('hidden'); }
 function hide(id) { document.getElementById(id).classList.add('hidden'); }
@@ -636,6 +655,8 @@ async function loadCalendar() {
   await fetchCalendarData();
   renderCalendar();
   renderTodoPanel(selectedDate);
+  await loadUnresolvedIssues();
+  await loadWeeklyTodos();
 }
 
 async function fetchCalendarData() {
@@ -656,11 +677,14 @@ async function fetchCalendarData() {
   });
 
   const {data:logs} = await sb.from('work_logs')
-    .select('log_date')
+    .select('log_date,issue,issue_resolved')
     .gte('log_date', firstDay)
     .lte('log_date', lastDayStr);
 
   calLogDates = new Set((logs||[]).map(l=>l.log_date));
+  calIssueDates = new Set(
+    (logs||[]).filter(l=>l.issue && !l.issue_resolved).map(l=>l.log_date)
+  );
 }
 
 function renderCalendar() {
@@ -695,9 +719,11 @@ function renderCalendar() {
 
     const hasTodos = calTodoData[dateStr]?.length > 0;
     const hasLogs = calLogDates.has(dateStr);
+    const hasIssue = calIssueDates.has(dateStr);
     const dots = [
       hasTodos ? `<div class="cal-dot" style="background:#10B981"></div>` : '',
       hasLogs ? `<div class="cal-dot" style="background:#4F46E5"></div>` : '',
+      hasIssue ? `<div class="cal-dot" style="background:#F59E0B"></div>` : '',
     ].join('');
 
     html += `<div class="${cls}" onclick="selectCalDate('${dateStr}')">
@@ -775,6 +801,7 @@ async function toggleTodo(id, dateStr, isDone) {
   await fetchCalendarData();
   renderCalendar();
   renderTodoPanel(dateStr);
+  await loadWeeklyTodos();
 }
 
 async function deleteTodo(id, dateStr) {
@@ -789,6 +816,103 @@ function changeMonth(delta) {
   if (calMonth > 11) { calMonth=0; calYear++; }
   if (calMonth < 0) { calMonth=11; calYear--; }
   loadCalendar();
+}
+
+// ── 미해결 이슈 리스트 ──
+async function loadUnresolvedIssues() {
+  const el = document.getElementById('unresolved-issues');
+  const {data} = await sb.from('work_logs')
+    .select('*, projects(name,color)')
+    .not('issue', 'is', null)
+    .neq('issue', '')
+    .eq('issue_resolved', false)
+    .order('log_date', {ascending:false});
+
+  const countEl = document.getElementById('issue-count');
+  if (!data||!data.length) {
+    countEl.textContent = '없음';
+    el.innerHTML = '<p style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0">미해결 이슈가 없어요 👍</p>';
+    return;
+  }
+  countEl.textContent = data.length + '건';
+  el.innerHTML = data.map(log=>`
+    <div style="background:#fff;border:1px solid #FDE68A;border-radius:12px;padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
+            <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${log.projects?.color}20;color:${log.projects?.color}">${escHtml(log.projects?.name||'')}</span>
+            <span style="font-size:11px;color:var(--muted)">${log.log_date} · ${escHtml(log.author_name||'')}</span>
+          </div>
+          <div style="font-size:13px;color:#D97706;font-weight:600;margin-bottom:2px">⚠️ ${escHtml(log.issue)}</div>
+          ${log.equipment?`<div style="font-size:11px;color:var(--muted)">📍 ${escHtml(log.equipment)}</div>`:''}
+        </div>
+        <button onclick="resolveIssue('${log.id}')"
+          style="flex-shrink:0;padding:5px 10px;border-radius:8px;border:1.5px solid #10B981;background:#fff;color:#10B981;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">
+          ✓ 해결
+        </button>
+      </div>
+    </div>`).join('');
+}
+
+async function resolveIssue(id) {
+  await sb.from('work_logs').update({issue_resolved:true}).eq('id',id);
+  await fetchCalendarData();
+  renderCalendar();
+  await loadUnresolvedIssues();
+}
+
+// ── 주간 할일 리스트 ──
+async function loadWeeklyTodos() {
+  const el = document.getElementById('weekly-todos');
+  const rangeEl = document.getElementById('week-range');
+
+  const today = new Date();
+  const dow = today.getDay();
+  const mon = new Date(today); mon.setDate(today.getDate() - (dow===0?6:dow-1));
+  const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+
+  const monStr = toDateStr(mon);
+  const sunStr = toDateStr(sun);
+  rangeEl.textContent = `${mon.getMonth()+1}/${mon.getDate()} ~ ${sun.getMonth()+1}/${sun.getDate()}`;
+
+  const {data} = await sb.from('todos')
+    .select('*')
+    .gte('due_date', monStr)
+    .lte('due_date', sunStr)
+    .order('due_date').order('is_done');
+
+  if (!data||!data.length) {
+    el.innerHTML='<p style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0">이번 주 등록된 할 일이 없어요</p>';
+    return;
+  }
+
+  // 날짜별 그룹
+  const DOW_KO = ['일','월','화','수','목','금','토'];
+  const grouped = {};
+  data.forEach(t=>{
+    if (!grouped[t.due_date]) grouped[t.due_date]=[];
+    grouped[t.due_date].push(t);
+  });
+
+  el.innerHTML = Object.entries(grouped).map(([date,todos])=>{
+    const d = new Date(date+'T00:00:00');
+    const isToday = date===toDateStr(new Date());
+    const label = `${d.getMonth()+1}/${d.getDate()} (${DOW_KO[d.getDay()]})`;
+    const doneCnt = todos.filter(t=>t.is_done).length;
+    return `
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden">
+      <div style="padding:10px 14px;background:${isToday?'var(--primary-light)':'#F8FAFC'};display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;font-weight:700;color:${isToday?'var(--primary)':'var(--text)'}">${label}${isToday?' · 오늘':''}</span>
+        <span style="font-size:11px;color:var(--muted)">${doneCnt}/${todos.length} 완료</span>
+      </div>
+      ${todos.map(t=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border)">
+          <div class="todo-check ${t.is_done?'done':''}" onclick="toggleTodo('${t.id}','${date}',${!t.is_done})">${t.is_done?'✓':''}</div>
+          <span style="flex:1;font-size:13px;${t.is_done?'text-decoration:line-through;color:var(--muted)':''}">${escHtml(t.title)}</span>
+          <span style="font-size:11px;color:var(--muted)">${escHtml(t.author_name||'')}</span>
+        </div>`).join('')}
+    </div>`;
+  }).join('');
 }
 
 // ── 색상 선택기 ──
