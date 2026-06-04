@@ -928,14 +928,16 @@ function selectColor(c, el) {
 }
 
 // ── 모달 ──
+let _modalCallback = null;
 function showModal(title, body, cb) {
+  _modalCallback = cb;
   const modal = document.getElementById('confirm-modal');
   modal.querySelector('.modal-box').innerHTML = `
     <h3>${title}</h3>
     <p style="font-size:13px;color:var(--muted);margin-bottom:16px">${body}</p>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal()">취소</button>
-      <button class="btn btn-danger" onclick="(${cb.toString()})()">삭제</button>
+      <button class="btn btn-danger" onclick="_modalCallback && _modalCallback()">확인</button>
     </div>`;
   modal.classList.remove('hidden');
 }
