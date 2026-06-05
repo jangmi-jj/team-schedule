@@ -220,12 +220,12 @@
           <option value="">단계 선택</option>
           <option value="1">1단계 - 납품/정위치</option>
           <option value="2">2단계 - 다이크/지진브라켓</option>
-          <option value="3">3단계 - 유틸리티 턴온</option>
-          <option value="4">4단계 - 전기 턴온</option>
-          <option value="5">5단계 - 인터락테스트</option>
+          <option value="3">3단계 - 전기 턴온</option>
+          <option value="4">4단계 - 인터락테스트</option>
+          <option value="5">5단계 - 유틸리티 턴온</option>
           <option value="6">6단계 - 설비안정화 및 구동</option>
           <option value="7">7단계 - 셋업평가</option>
-          <option value="8">8단계 - 셋업보고서 송부</option>
+          <option value="8">8단계 - 셋업보고서</option>
           <option value="9">9단계 - 종료</option>
         </select>
         <div class="progress-preview" id="progress-preview" style="display:none">
@@ -239,7 +239,17 @@
       </div>
       <div class="form-group">
         <label>이슈사항 <span style="font-weight:400;color:var(--muted)">(없으면 비워두세요)</span></label>
-        <textarea id="log-issue" placeholder="작업 중 발생한 이슈를 입력해 주세요" style="min-height:60px"></textarea>
+        <textarea id="log-issue" placeholder="작업 중 발생한 이슈를 입력해 주세요" style="min-height:60px"
+          oninput="toggleIssueType()"></textarea>
+      </div>
+      <div class="form-group hidden" id="issue-type-group">
+        <label>이슈 유형 <span style="font-weight:400;color:var(--danger)">*</span></label>
+        <select id="log-issue-type">
+          <option value="하드웨어_원자재">하드웨어_원자재</option>
+          <option value="하드웨어_휴먼">하드웨어_휴먼</option>
+          <option value="소프트웨어">소프트웨어</option>
+          <option value="기타">기타</option>
+        </select>
       </div>
       <div class="form-group">
         <label>날짜</label>
@@ -338,41 +348,7 @@
     </div>
 
     <!-- 이슈 목록 -->
-    <div id="issue-list" style="margin-bottom:20px"><div class="loading">불러오는 중...</div></div>
-
-    <!-- 이슈 등록 폼 -->
-    <div class="add-box">
-      <h4>➕ 이슈 등록</h4>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="form-group">
-          <label>프로젝트</label>
-          <select id="issue-project" onchange="onIssueProjectChange()"></select>
-        </div>
-        <div class="form-group">
-          <label>호기</label>
-          <select id="issue-unit"><option value="">호기 선택</option></select>
-        </div>
-      </div>
-      <div class="form-group">
-        <label>설비명</label>
-        <input id="issue-equipment" type="text" placeholder="설비명 입력" />
-      </div>
-      <div class="form-group">
-        <label>이슈 유형</label>
-        <select id="issue-type">
-          <option value="하드웨어_원자재">하드웨어_원자재</option>
-          <option value="하드웨어_휴먼">하드웨어_휴먼</option>
-          <option value="소프트웨어">소프트웨어</option>
-          <option value="기타">기타</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>이슈 내용</label>
-        <textarea id="issue-desc" placeholder="이슈 내용을 입력해 주세요"></textarea>
-      </div>
-      <button class="btn btn-primary btn-full" onclick="submitIssue()">이슈 등록</button>
-      <p id="issue-msg" style="margin-top:8px;font-size:13px"></p>
-    </div>
+    <div id="issue-list"><div class="loading">불러오는 중...</div></div>
   </div>
 
   <!-- 탭4: PJT 관리 -->
@@ -715,6 +691,7 @@ async function submitLog() {
   const stage = parseInt(document.getElementById('log-stage').value) || 0;
   const content = document.getElementById('log-content').value.trim();
   const issue = document.getElementById('log-issue')?.value.trim() || '';
+  const issueType = issue ? (document.getElementById('log-issue-type')?.value || '') : '';
   const date = document.getElementById('log-date').value;
 
   if (!projectId) { showMsg('log-msg','프로젝트를 선택해 주세요',false); return; }
@@ -724,12 +701,13 @@ async function submitLog() {
   const {error} = await sb.from('work_logs').insert({
     project_id:projectId, user_id:currentUser.id,
     author_name:currentUserName, content, log_date:date,
-    stage, issue, unit_id: unitId,
+    stage, issue, issue_type: issueType, unit_id: unitId,
   });
   if (error) { showMsg('log-msg','저장 실패: '+error.message,false); return; }
 
   document.getElementById('log-content').value='';
   if (document.getElementById('log-issue')) document.getElementById('log-issue').value='';
+  document.getElementById('issue-type-group')?.classList.add('hidden');
   document.getElementById('log-stage').value='';
   document.getElementById('progress-preview').style.display='none';
   showMsg('log-msg','저장됐어요! ✓',true);
@@ -1040,6 +1018,13 @@ async function renderTodoPanel(dateStr) {
     </div>`;
 }
 
+function toggleIssueType() {
+  const issue = document.getElementById('log-issue')?.value.trim();
+  const group = document.getElementById('issue-type-group');
+  if (issue) group?.classList.remove('hidden');
+  else group?.classList.add('hidden');
+}
+
 function renderTodoItem(t, dateStr) {
   return `
     <div class="todo-item" id="todo-${t.id}">
@@ -1174,6 +1159,10 @@ async function resolveIssue(id) {
   await fetchCalendarData();
   renderCalendar();
   await loadUnresolvedIssues();
+  // 이슈 관리 탭이 열려있으면 같이 갱신
+  if (!document.getElementById('tab-issues').classList.contains('hidden')) {
+    await fetchAllIssues();
+  }
 }
 
 // ── 주간 할일 리스트 ──
@@ -1414,31 +1403,18 @@ let issueChartType = null;
 let issueChartResolved = null;
 
 async function loadIssuesTab() {
-  // 프로젝트 필터 셀렉트 채우기
   const sel = document.getElementById('issue-filter-project');
   sel.innerHTML = `<option value="">전체 프로젝트</option>` +
     projects.map(p=>`<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
-
-  // 이슈 등록 폼 프로젝트 셀렉트
-  const sel2 = document.getElementById('issue-project');
-  sel2.innerHTML = projects.map(p=>`<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
-  onIssueProjectChange();
-
   await fetchAllIssues();
 }
 
-function onIssueProjectChange() {
-  const pid = document.getElementById('issue-project').value;
-  const units = unitsByProject[pid] || [];
-  const sel = document.getElementById('issue-unit');
-  sel.innerHTML = `<option value="">호기 선택 (선택사항)</option>` +
-    units.map(u=>`<option value="${u.id}">${escHtml(u.name)}${u.fab?' · '+u.fab:''}${u.location?' · '+u.location:''}</option>`).join('');
-}
-
 async function fetchAllIssues() {
-  const {data} = await sb.from('issues')
+  const {data} = await sb.from('work_logs')
     .select('*, projects(name), equipment_units(name,fab,location)')
-    .order('created_at', {ascending:false});
+    .not('issue','is',null)
+    .neq('issue','')
+    .order('created_at',{ascending:false});
   allIssues = data || [];
   filterIssues();
   renderIssueCharts();
@@ -1451,98 +1427,81 @@ function filterIssues() {
 
   let list = allIssues.filter(i => {
     if (typeF && i.issue_type !== typeF) return false;
-    if (resolvedF !== '' && String(i.is_resolved) !== resolvedF) return false;
+    if (resolvedF !== '' && String(i.issue_resolved) !== resolvedF) return false;
     if (projF && i.project_id !== projF) return false;
     return true;
   });
 
   const el = document.getElementById('issue-list');
-  if (!list.length) { el.innerHTML='<p class="log-empty">해당 이슈가 없어요</p>'; return; }
+  if (!list.length) { el.innerHTML='<p class="log-empty">등록된 이슈가 없어요<br><span style="font-size:12px;color:var(--muted)">작업 입력 시 이슈사항을 입력하면 자동으로 등록돼요</span></p>'; return; }
 
   const TYPE_COLOR = {
-    '하드웨어_원자재':'#EF4444', '하드웨어_휴먼':'#F59E0B',
-    '소프트웨어':'#4F46E5', '기타':'#94A3B8'
+    '하드웨어_원자재':'#EF4444','하드웨어_휴먼':'#F59E0B',
+    '소프트웨어':'#4F46E5','기타':'#94A3B8'
   };
 
-  el.innerHTML = list.map(i=>`
-    <div style="background:#fff;border:1px solid ${i.is_resolved?'var(--border)':'#FDE68A'};border-radius:12px;padding:14px;margin-bottom:8px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
-        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
-          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${TYPE_COLOR[i.issue_type]||'#94A3B8'}20;color:${TYPE_COLOR[i.issue_type]||'#94A3B8'}">${i.issue_type}</span>
-          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${i.is_resolved?'#D1FAE5':'#FEF3C7'};color:${i.is_resolved?'#10B981':'#D97706'}">${i.is_resolved?'✓ 해결':'미해결'}</span>
-          <span style="font-size:11px;color:var(--muted)">${i.projects?.name||''}</span>
-        </div>
-        ${!i.is_resolved?`<button onclick="resolveIssueRecord('${i.id}')"
-          style="flex-shrink:0;padding:4px 10px;border-radius:7px;border:1.5px solid #10B981;color:#10B981;background:#fff;font-size:11px;font-weight:700;cursor:pointer">✓ 해결</button>`:''}
-      </div>
-      <div style="font-size:13px;font-weight:600;margin-bottom:3px">${escHtml(i.equipment_name||'')}</div>
-      ${i.equipment_units?.name?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">호기: ${escHtml(i.equipment_units.name)}${i.equipment_units.fab?' · FAB: '+escHtml(i.equipment_units.fab):''}${i.equipment_units.location?' · '+escHtml(i.equipment_units.location):''}</div>`:''}
-      <div style="font-size:13px;line-height:1.5;margin-bottom:6px">${escHtml(i.description)}</div>
-      <div style="font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap">
-        <span>등록: ${escHtml(i.created_by||'')} · ${i.created_at?.slice(0,10)||''}</span>
-        ${i.is_resolved&&i.resolved_by?`<span style="color:var(--success)">해결: ${escHtml(i.resolved_by)} · ${i.resolved_at?.slice(0,10)||''}</span>`:''}
-      </div>
-    </div>`).join('');
+  el.innerHTML = `
+    <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#F8FAFC;border-bottom:2px solid var(--border)">
+          <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);white-space:nowrap">상태</th>
+          <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);white-space:nowrap">프로젝트</th>
+          <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);white-space:nowrap">호기</th>
+          <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);white-space:nowrap">이슈 유형</th>
+          <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted)">이슈 내용</th>
+          <th style="padding:10px 12px;text-align:left;font-size:12px;color:var(--muted);white-space:nowrap">등록자 · 일자</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${list.map(i=>`
+        <tr style="border-bottom:1px solid var(--border);background:${i.issue_resolved?'#fff':'#FFFBF0'}">
+          <td style="padding:10px 12px;white-space:nowrap">
+            <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${i.issue_resolved?'#D1FAE5':'#FEF3C7'};color:${i.issue_resolved?'#10B981':'#D97706'}">
+              ${i.issue_resolved?'✓ 해결':'미해결'}
+            </span>
+          </td>
+          <td style="padding:10px 12px;font-size:12px;color:var(--muted);white-space:nowrap">${escHtml(i.projects?.name||'-')}</td>
+          <td style="padding:10px 12px;font-size:12px;white-space:nowrap">
+            ${i.equipment_units?.name?`<div style="font-weight:600">${escHtml(i.equipment_units.name)}</div>
+            <div style="font-size:10px;color:var(--muted)">${[i.equipment_units.fab,i.equipment_units.location].filter(Boolean).join(' · ')}</div>`:'-'}
+          </td>
+          <td style="padding:10px 12px;white-space:nowrap">
+            ${i.issue_type?`<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${TYPE_COLOR[i.issue_type]||'#94A3B8'}20;color:${TYPE_COLOR[i.issue_type]||'#94A3B8'}">${escHtml(i.issue_type)}</span>`:'-'}
+          </td>
+          <td style="padding:10px 12px;line-height:1.5">${escHtml(i.issue)}</td>
+          <td style="padding:10px 12px;font-size:11px;color:var(--muted);white-space:nowrap">
+            ${escHtml(i.author_name||'')} · ${i.log_date||''}
+            ${i.issue_resolved?`<div style="color:var(--success);margin-top:2px">해결완료</div>`:''}
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>`;
 }
 
 function renderIssueCharts() {
-  // 유형별 차트
   const types = ['하드웨어_원자재','하드웨어_휴먼','소프트웨어','기타'];
   const typeCounts = types.map(t=>allIssues.filter(i=>i.issue_type===t).length);
   const typeColors = ['#EF4444','#F59E0B','#4F46E5','#94A3B8'];
 
   if (issueChartType) issueChartType.destroy();
-  issueChartType = new Chart(document.getElementById('chart-type'), {
-    type: 'bar',
-    data: { labels: types, datasets: [{ data: typeCounts, backgroundColor: typeColors, borderRadius: 6 }] },
-    options: { plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true,ticks:{stepSize:1}} }, responsive:true }
+  const ctxType = document.getElementById('chart-type');
+  if (ctxType) issueChartType = new Chart(ctxType, {
+    type:'bar',
+    data:{labels:types,datasets:[{data:typeCounts,backgroundColor:typeColors,borderRadius:6}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}},responsive:true}
   });
 
-  // 해결 현황 차트
-  const resolved = allIssues.filter(i=>i.is_resolved).length;
+  const resolved = allIssues.filter(i=>i.issue_resolved).length;
   const unresolved = allIssues.length - resolved;
-
   if (issueChartResolved) issueChartResolved.destroy();
-  issueChartResolved = new Chart(document.getElementById('chart-resolved'), {
-    type: 'doughnut',
-    data: {
-      labels: ['해결 완료','미해결'],
-      datasets: [{ data:[resolved,unresolved], backgroundColor:['#10B981','#F59E0B'], borderWidth:0 }]
-    },
-    options: { plugins:{legend:{position:'bottom'}}, responsive:true }
+  const ctxRes = document.getElementById('chart-resolved');
+  if (ctxRes) issueChartResolved = new Chart(ctxRes, {
+    type:'doughnut',
+    data:{labels:['해결 완료','미해결'],datasets:[{data:[resolved,unresolved],backgroundColor:['#10B981','#F59E0B'],borderWidth:0}]},
+    options:{plugins:{legend:{position:'bottom'}},responsive:true}
   });
-}
-
-async function submitIssue() {
-  const projectId = document.getElementById('issue-project').value;
-  const unitId = document.getElementById('issue-unit').value || null;
-  const equipment = document.getElementById('issue-equipment').value.trim();
-  const type = document.getElementById('issue-type').value;
-  const desc = document.getElementById('issue-desc').value.trim();
-
-  if (!desc) { showMsg('issue-msg','이슈 내용을 입력해 주세요',false); return; }
-
-  const {error} = await sb.from('issues').insert({
-    project_id: projectId, unit_id: unitId,
-    equipment_name: equipment, issue_type: type,
-    description: desc, created_by: currentUserName,
-    user_id: currentUser.id,
-  });
-  if (error) { showMsg('issue-msg','등록 실패: '+error.message,false); return; }
-
-  document.getElementById('issue-equipment').value='';
-  document.getElementById('issue-desc').value='';
-  showMsg('issue-msg','이슈가 등록됐어요!',true);
-  await fetchAllIssues();
-}
-
-async function resolveIssueRecord(id) {
-  await sb.from('issues').update({
-    is_resolved: true,
-    resolved_by: currentUserName,
-    resolved_at: new Date().toISOString(),
-  }).eq('id',id);
-  await fetchAllIssues();
 }
 
 // ── 모달 ──
