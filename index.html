@@ -238,18 +238,18 @@
         <textarea id="log-content" placeholder="오늘 수행한 작업 내용을 입력해 주세요"></textarea>
       </div>
       <div class="form-group">
-        <label>이슈사항 <span style="font-weight:400;color:var(--muted)">(없으면 비워두세요)</span></label>
-        <textarea id="log-issue" placeholder="작업 중 발생한 이슈를 입력해 주세요" style="min-height:60px"
-          oninput="toggleIssueType()"></textarea>
-      </div>
-      <div class="form-group hidden" id="issue-type-group">
-        <label>이슈 유형 <span style="font-weight:400;color:var(--danger)">*</span></label>
+        <label>이슈 발생 구분 <span style="font-weight:400;color:var(--muted)">(이슈 없으면 선택 불필요)</span></label>
         <select id="log-issue-type">
+          <option value="">구분 선택</option>
           <option value="하드웨어_원자재">하드웨어_원자재</option>
           <option value="하드웨어_휴먼">하드웨어_휴먼</option>
           <option value="소프트웨어">소프트웨어</option>
           <option value="기타">기타</option>
         </select>
+      </div>
+      <div class="form-group">
+        <label>이슈사항 <span style="font-weight:400;color:var(--muted)">(없으면 비워두세요)</span></label>
+        <textarea id="log-issue" placeholder="작업 중 발생한 이슈를 입력해 주세요" style="min-height:60px"></textarea>
       </div>
       <div class="form-group">
         <label>날짜</label>
@@ -691,7 +691,7 @@ async function submitLog() {
   const stage = parseInt(document.getElementById('log-stage').value) || 0;
   const content = document.getElementById('log-content').value.trim();
   const issue = document.getElementById('log-issue')?.value.trim() || '';
-  const issueType = issue ? (document.getElementById('log-issue-type')?.value || '') : '';
+  const issueType = document.getElementById('log-issue-type')?.value || '';
   const date = document.getElementById('log-date').value;
 
   if (!projectId) { showMsg('log-msg','프로젝트를 선택해 주세요',false); return; }
@@ -707,7 +707,7 @@ async function submitLog() {
 
   document.getElementById('log-content').value='';
   if (document.getElementById('log-issue')) document.getElementById('log-issue').value='';
-  document.getElementById('issue-type-group')?.classList.add('hidden');
+  if (document.getElementById('log-issue-type')) document.getElementById('log-issue-type').value='';
   document.getElementById('log-stage').value='';
   document.getElementById('progress-preview').style.display='none';
   showMsg('log-msg','저장됐어요! ✓',true);
