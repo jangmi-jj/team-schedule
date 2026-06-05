@@ -628,29 +628,24 @@ function updateProgressPreview() {
 
 async function submitLog() {
   const projectId = document.getElementById('log-project').value;
-  const equipment = document.getElementById('log-equipment').value.trim();
   const stage = parseInt(document.getElementById('log-stage').value) || 0;
   const content = document.getElementById('log-content').value.trim();
-  const customer = document.getElementById('log-customer').value.trim();
-  const issue = document.getElementById('log-issue').value.trim();
+  const issue = document.getElementById('log-issue')?.value.trim() || '';
   const date = document.getElementById('log-date').value;
 
   if (!projectId) { showMsg('log-msg','프로젝트를 선택해 주세요',false); return; }
   if (!content) { showMsg('log-msg','작업 내용을 입력해 주세요',false); return; }
 
-  const unitId = document.getElementById('log-unit').value || null;
+  const unitId = document.getElementById('log-unit')?.value || null;
   const {error} = await sb.from('work_logs').insert({
     project_id:projectId, user_id:currentUser.id,
     author_name:currentUserName, content, log_date:date,
-    equipment, stage, customer_manager:customer, issue,
-    unit_id: unitId,
+    stage, issue, unit_id: unitId,
   });
   if (error) { showMsg('log-msg','저장 실패: '+error.message,false); return; }
 
   document.getElementById('log-content').value='';
-  document.getElementById('log-issue').value='';
-  document.getElementById('log-equipment').value='';
-  document.getElementById('log-customer').value='';
+  if (document.getElementById('log-issue')) document.getElementById('log-issue').value='';
   document.getElementById('log-stage').value='';
   document.getElementById('progress-preview').style.display='none';
   showMsg('log-msg','저장됐어요! ✓',true);
