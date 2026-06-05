@@ -1166,16 +1166,20 @@ function renderUnitList() {
     return;
   }
   el.innerHTML = units.map(u=>`
-    <div style="padding:10px 0;border-bottom:1px solid var(--border)">
+    <div id="unit-row-${u.id}" style="padding:10px 0;border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-        <div>
+        <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:700;margin-bottom:3px">${escHtml(u.name)}</div>
           <div style="font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap">
             ${u.fab ? `<span>FAB: <strong style="color:var(--text)">${escHtml(u.fab)}</strong></span>` : ''}
             ${u.location ? `<span>위치: <strong style="color:var(--text)">${escHtml(u.location)}</strong></span>` : ''}
           </div>
         </div>
-        <button onclick="deleteUnit('${u.id}')" class="btn btn-danger btn-sm" style="flex-shrink:0">삭제</button>
+        <div style="display:flex;gap:5px;flex-shrink:0">
+          <button onclick="startEditUnit('${u.id}','${escHtml(u.name)}','${escHtml(u.fab||'')}','${escHtml(u.location||'')}')"
+            style="padding:4px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;font-size:11px;font-weight:600;cursor:pointer;color:var(--text)">수정</button>
+          <button onclick="deleteUnit('${u.id}')" class="btn btn-danger btn-sm">삭제</button>
+        </div>
       </div>
     </div>`).join('');
 }
@@ -1207,6 +1211,46 @@ async function addUnit() {
 
 async function deleteUnit(unitId) {
   await sb.from('equipment_units').delete().eq('id',unitId);
+  await loadAllUnits();
+  renderUnitList();
+  loadProjectList();
+}
+
+function startEditUnit(id, name, fab, location) {
+  const row = document.getElementById('unit-row-'+id);
+  if (!row) return;
+  row.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px">
+      <div>
+        <label style="font-size:10px;color:var(--muted)">호기 ID / S/N</label>
+        <input id="eu-name-${id}" type="text" value="${name}" style="padding:6px 10px;font-size:12px" />
+      </div>
+      <div>
+        <label style="font-size:10px;color:var(--muted)">FAB</label>
+        <input id="eu-fab-${id}" type="text" value="${fab}" style="padding:6px 10px;font-size:12px" />
+      </div>
+    </div>
+    <div style="margin-bottom:8px">
+      <label style="font-size:10px;color:var(--muted)">세부 위치</label>
+      <input id="eu-loc-${id}" type="text" value="${location}" style="padding:6px 10px;font-size:12px"
+        onkeydown="if(event.key==='Enter')saveEditUnit('${id}')" />
+    </div>
+    <div style="display:flex;gap:6px">
+      <button onclick="saveEditUnit('${id}')"
+        style="flex:1;padding:6px;border-radius:8px;border:none;background:var(--primary);color:#fff;font-size:12px;font-weight:700;cursor:pointer">저장</button>
+      <button onclick="renderUnitList()"
+        style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;font-size:12px;cursor:pointer">취소</button>
+    </div>`;
+  document.getElementById('eu-name-'+id)?.focus();
+}
+
+async function saveEditUnit(id) {
+  const name = document.getElementById('eu-name-'+id)?.value.trim();
+  const fab = document.getElementById('eu-fab-'+id)?.value.trim();
+  const location = document.getElementById('eu-loc-'+id)?.value.trim();
+  if (!name) { alert('호기 ID/S/N을 입력해 주세요'); return; }
+  const {error} = await sb.from('equipment_units').update({name, fab, location}).eq('id',id);
+  if (error) { alert('수정 실패: '+error.message); return; }
   await loadAllUnits();
   renderUnitList();
   loadProjectList();
