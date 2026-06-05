@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>팀 일정 관리</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
@@ -193,6 +194,7 @@
     <button class="active" onclick="switchTab('input')">✍️ 작업 입력</button>
     <button onclick="switchTab('status')">📊 PJT 현황</button>
     <button onclick="switchTab('calendar')">📅 캘린더</button>
+    <button onclick="switchTab('issues')">🔧 이슈 관리</button>
     <button onclick="switchTab('projects')">🗂 PJT 관리</button>
   </div>
 
@@ -298,6 +300,78 @@
         <span id="next-week-range" style="font-size:12px;color:var(--muted)"></span>
       </div>
       <div id="next-weekly-todos"><div class="loading">불러오는 중...</div></div>
+    </div>
+  </div>
+
+  <!-- 탭4: 이슈 관리 -->
+  <div id="tab-issues" class="tab-content hidden">
+
+    <!-- 차트 영역 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      <div class="card" style="padding:16px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">이슈 유형별</div>
+        <canvas id="chart-type" height="180"></canvas>
+      </div>
+      <div class="card" style="padding:16px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:10px">해결 현황</div>
+        <canvas id="chart-resolved" height="180"></canvas>
+      </div>
+    </div>
+
+    <!-- 필터 -->
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+      <select id="issue-filter-type" onchange="filterIssues()" style="flex:1;min-width:120px">
+        <option value="">전체 유형</option>
+        <option value="하드웨어_원자재">하드웨어_원자재</option>
+        <option value="하드웨어_휴먼">하드웨어_휴먼</option>
+        <option value="소프트웨어">소프트웨어</option>
+        <option value="기타">기타</option>
+      </select>
+      <select id="issue-filter-resolved" onchange="filterIssues()" style="flex:1;min-width:120px">
+        <option value="">전체 상태</option>
+        <option value="false">미해결</option>
+        <option value="true">해결 완료</option>
+      </select>
+      <select id="issue-filter-project" onchange="filterIssues()" style="flex:1;min-width:120px">
+        <option value="">전체 프로젝트</option>
+      </select>
+    </div>
+
+    <!-- 이슈 목록 -->
+    <div id="issue-list" style="margin-bottom:20px"><div class="loading">불러오는 중...</div></div>
+
+    <!-- 이슈 등록 폼 -->
+    <div class="add-box">
+      <h4>➕ 이슈 등록</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group">
+          <label>프로젝트</label>
+          <select id="issue-project" onchange="onIssueProjectChange()"></select>
+        </div>
+        <div class="form-group">
+          <label>호기</label>
+          <select id="issue-unit"><option value="">호기 선택</option></select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>설비명</label>
+        <input id="issue-equipment" type="text" placeholder="설비명 입력" />
+      </div>
+      <div class="form-group">
+        <label>이슈 유형</label>
+        <select id="issue-type">
+          <option value="하드웨어_원자재">하드웨어_원자재</option>
+          <option value="하드웨어_휴먼">하드웨어_휴먼</option>
+          <option value="소프트웨어">소프트웨어</option>
+          <option value="기타">기타</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>이슈 내용</label>
+        <textarea id="issue-desc" placeholder="이슈 내용을 입력해 주세요"></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="submitIssue()">이슈 등록</button>
+      <p id="issue-msg" style="margin-top:8px;font-size:13px"></p>
     </div>
   </div>
 
@@ -458,14 +532,15 @@ async function onLoggedIn(user) {
 
 // ── 탭 ──
 function switchTab(tab) {
-  ['input','status','calendar','projects'].forEach(t => {
+  ['input','status','calendar','issues','projects'].forEach(t => {
     document.getElementById('tab-'+t).classList.toggle('hidden', t!==tab);
   });
   document.querySelectorAll('.tab-nav button').forEach((b,i) => {
-    b.classList.toggle('active', ['input','status','calendar','projects'][i]===tab);
+    b.classList.toggle('active', ['input','status','calendar','issues','projects'][i]===tab);
   });
   if (tab==='status') loadStatus();
-  if (tab==='calendar') { loadCalendar(); }
+  if (tab==='calendar') loadCalendar();
+  if (tab==='issues') loadIssuesTab();
   if (tab==='projects') loadProjectList();
   if (tab==='input') { loadProjectSelect(); loadMyRecentLogs(); }
 }
@@ -958,24 +1033,31 @@ async function renderTodoPanel(dateStr) {
       <div id="todo-list">
         ${todos.length===0
           ? '<p style="font-size:13px;color:var(--muted);text-align:center;padding:12px 0">등록된 할 일이 없어요</p>'
-          : todos.map(t=>`
-            <div class="todo-item" id="todo-${t.id}">
-              <div class="todo-check ${t.is_done?'done':''}" onclick="toggleTodo('${t.id}','${dateStr}',${!t.is_done})">
-                ${t.is_done?'✓':''}
-              </div>
-              <div style="flex:1">
-                <div class="todo-text ${t.is_done?'done':''}">${escHtml(t.title)}</div>
-                <div class="todo-due">${escHtml(t.author_name||'')}</div>
-              </div>
-              <div style="display:flex;gap:4px;flex-shrink:0">
-                <button onclick="startEditTodo('${t.id}','${dateStr}',\`${escHtml(t.title)}\`)"
-                  style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-size:11px;padding:3px 7px">수정</button>
-                <button class="todo-del" onclick="deleteTodo('${t.id}','${dateStr}')">✕</button>
-              </div>
-            </div>`).join('')
+          : todos.map(t=>renderTodoItem(t, dateStr)).join('')
         }
       </div>
       ${logs?`<div style="margin-top:12px;padding:8px 12px;background:var(--primary-light);border-radius:8px;font-size:12px;color:var(--primary)">📌 이 날 작업 기록이 있어요</div>`:''}
+    </div>`;
+}
+
+function renderTodoItem(t, dateStr) {
+  return `
+    <div class="todo-item" id="todo-${t.id}">
+      <div class="todo-check ${t.is_done?'done':''}" onclick="toggleTodo('${t.id}','${dateStr}',${!t.is_done})">
+        ${t.is_done?'✓':''}
+      </div>
+      <div style="flex:1;min-width:0">
+        <div class="todo-text ${t.is_done?'done':''}">${escHtml(t.title)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px;display:flex;gap:6px;flex-wrap:wrap">
+          <span>작성: ${escHtml(t.author_name||'')}</span>
+          ${t.is_done && t.checked_by ? `<span style="color:var(--success)">✓ ${escHtml(t.checked_by)}</span>` : ''}
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;flex-shrink:0">
+        <button onclick="startEditTodo('${t.id}','${dateStr}',\`${escHtml(t.title)}\`)"
+          style="background:none;border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--muted);font-size:11px;padding:3px 7px">수정</button>
+        <button class="todo-del" onclick="deleteTodo('${t.id}','${dateStr}')">✕</button>
+      </div>
     </div>`;
 }
 
@@ -996,11 +1078,17 @@ async function addTodo(dateStr) {
 }
 
 async function toggleTodo(id, dateStr, isDone) {
-  await sb.from('todos').update({is_done:isDone}).eq('id',id);
+  const updateData = {
+    is_done: isDone,
+    checked_by: isDone ? currentUserName : null,
+    checked_at: isDone ? new Date().toISOString() : null,
+  };
+  await sb.from('todos').update(updateData).eq('id',id);
   await fetchCalendarData();
   renderCalendar();
   renderTodoPanel(dateStr);
   await loadWeeklyTodos();
+  await loadNextWeekTodos();
 }
 
 async function deleteTodo(id, dateStr) {
@@ -1135,8 +1223,13 @@ async function loadWeeklyTodos() {
       ${todos.map(t=>`
         <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border)">
           <div class="todo-check ${t.is_done?'done':''}" onclick="toggleTodo('${t.id}','${date}',${!t.is_done})">${t.is_done?'✓':''}</div>
-          <span style="flex:1;font-size:13px;${t.is_done?'text-decoration:line-through;color:var(--muted)':''}">${escHtml(t.title)}</span>
-          <span style="font-size:11px;color:var(--muted)">${escHtml(t.author_name||'')}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;${t.is_done?'text-decoration:line-through;color:var(--muted)':''}">${escHtml(t.title)}</div>
+            <div style="font-size:10px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">
+              <span>작성: ${escHtml(t.author_name||'')}</span>
+              ${t.is_done&&t.checked_by?`<span style="color:var(--success)">✓ ${escHtml(t.checked_by)}</span>`:''}
+            </div>
+          </div>
         </div>`).join('')}
     </div>`;
   }).join('');
@@ -1188,8 +1281,13 @@ async function loadNextWeekTodos() {
       ${todos.map(t=>`
         <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border)">
           <div class="todo-check ${t.is_done?'done':''}" onclick="toggleTodo('${t.id}','${date}',${!t.is_done})">${t.is_done?'✓':''}</div>
-          <span style="flex:1;font-size:13px;${t.is_done?'text-decoration:line-through;color:var(--muted)':''}">${escHtml(t.title)}</span>
-          <span style="font-size:11px;color:var(--muted)">${escHtml(t.author_name||'')}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px;${t.is_done?'text-decoration:line-through;color:var(--muted)':''}">${escHtml(t.title)}</div>
+            <div style="font-size:10px;color:var(--muted);display:flex;gap:6px;flex-wrap:wrap;margin-top:2px">
+              <span>작성: ${escHtml(t.author_name||'')}</span>
+              ${t.is_done&&t.checked_by?`<span style="color:var(--success)">✓ ${escHtml(t.checked_by)}</span>`:''}
+            </div>
+          </div>
         </div>`).join('')}
     </div>`;
   }).join('');
@@ -1309,6 +1407,143 @@ async function saveEditUnit(id) {
 
 // ── 색상 선택기 ──
 // 색상 선택기 제거됨 (진척률 기준 자동 색상)
+
+// ── 이슈 관리 ──
+let allIssues = [];
+let issueChartType = null;
+let issueChartResolved = null;
+
+async function loadIssuesTab() {
+  // 프로젝트 필터 셀렉트 채우기
+  const sel = document.getElementById('issue-filter-project');
+  sel.innerHTML = `<option value="">전체 프로젝트</option>` +
+    projects.map(p=>`<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+
+  // 이슈 등록 폼 프로젝트 셀렉트
+  const sel2 = document.getElementById('issue-project');
+  sel2.innerHTML = projects.map(p=>`<option value="${p.id}">${escHtml(p.name)}</option>`).join('');
+  onIssueProjectChange();
+
+  await fetchAllIssues();
+}
+
+function onIssueProjectChange() {
+  const pid = document.getElementById('issue-project').value;
+  const units = unitsByProject[pid] || [];
+  const sel = document.getElementById('issue-unit');
+  sel.innerHTML = `<option value="">호기 선택 (선택사항)</option>` +
+    units.map(u=>`<option value="${u.id}">${escHtml(u.name)}${u.fab?' · '+u.fab:''}${u.location?' · '+u.location:''}</option>`).join('');
+}
+
+async function fetchAllIssues() {
+  const {data} = await sb.from('issues')
+    .select('*, projects(name), equipment_units(name,fab,location)')
+    .order('created_at', {ascending:false});
+  allIssues = data || [];
+  filterIssues();
+  renderIssueCharts();
+}
+
+function filterIssues() {
+  const typeF = document.getElementById('issue-filter-type')?.value || '';
+  const resolvedF = document.getElementById('issue-filter-resolved')?.value || '';
+  const projF = document.getElementById('issue-filter-project')?.value || '';
+
+  let list = allIssues.filter(i => {
+    if (typeF && i.issue_type !== typeF) return false;
+    if (resolvedF !== '' && String(i.is_resolved) !== resolvedF) return false;
+    if (projF && i.project_id !== projF) return false;
+    return true;
+  });
+
+  const el = document.getElementById('issue-list');
+  if (!list.length) { el.innerHTML='<p class="log-empty">해당 이슈가 없어요</p>'; return; }
+
+  const TYPE_COLOR = {
+    '하드웨어_원자재':'#EF4444', '하드웨어_휴먼':'#F59E0B',
+    '소프트웨어':'#4F46E5', '기타':'#94A3B8'
+  };
+
+  el.innerHTML = list.map(i=>`
+    <div style="background:#fff;border:1px solid ${i.is_resolved?'var(--border)':'#FDE68A'};border-radius:12px;padding:14px;margin-bottom:8px">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${TYPE_COLOR[i.issue_type]||'#94A3B8'}20;color:${TYPE_COLOR[i.issue_type]||'#94A3B8'}">${i.issue_type}</span>
+          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${i.is_resolved?'#D1FAE5':'#FEF3C7'};color:${i.is_resolved?'#10B981':'#D97706'}">${i.is_resolved?'✓ 해결':'미해결'}</span>
+          <span style="font-size:11px;color:var(--muted)">${i.projects?.name||''}</span>
+        </div>
+        ${!i.is_resolved?`<button onclick="resolveIssueRecord('${i.id}')"
+          style="flex-shrink:0;padding:4px 10px;border-radius:7px;border:1.5px solid #10B981;color:#10B981;background:#fff;font-size:11px;font-weight:700;cursor:pointer">✓ 해결</button>`:''}
+      </div>
+      <div style="font-size:13px;font-weight:600;margin-bottom:3px">${escHtml(i.equipment_name||'')}</div>
+      ${i.equipment_units?.name?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">호기: ${escHtml(i.equipment_units.name)}${i.equipment_units.fab?' · FAB: '+escHtml(i.equipment_units.fab):''}${i.equipment_units.location?' · '+escHtml(i.equipment_units.location):''}</div>`:''}
+      <div style="font-size:13px;line-height:1.5;margin-bottom:6px">${escHtml(i.description)}</div>
+      <div style="font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap">
+        <span>등록: ${escHtml(i.created_by||'')} · ${i.created_at?.slice(0,10)||''}</span>
+        ${i.is_resolved&&i.resolved_by?`<span style="color:var(--success)">해결: ${escHtml(i.resolved_by)} · ${i.resolved_at?.slice(0,10)||''}</span>`:''}
+      </div>
+    </div>`).join('');
+}
+
+function renderIssueCharts() {
+  // 유형별 차트
+  const types = ['하드웨어_원자재','하드웨어_휴먼','소프트웨어','기타'];
+  const typeCounts = types.map(t=>allIssues.filter(i=>i.issue_type===t).length);
+  const typeColors = ['#EF4444','#F59E0B','#4F46E5','#94A3B8'];
+
+  if (issueChartType) issueChartType.destroy();
+  issueChartType = new Chart(document.getElementById('chart-type'), {
+    type: 'bar',
+    data: { labels: types, datasets: [{ data: typeCounts, backgroundColor: typeColors, borderRadius: 6 }] },
+    options: { plugins:{legend:{display:false}}, scales:{ y:{beginAtZero:true,ticks:{stepSize:1}} }, responsive:true }
+  });
+
+  // 해결 현황 차트
+  const resolved = allIssues.filter(i=>i.is_resolved).length;
+  const unresolved = allIssues.length - resolved;
+
+  if (issueChartResolved) issueChartResolved.destroy();
+  issueChartResolved = new Chart(document.getElementById('chart-resolved'), {
+    type: 'doughnut',
+    data: {
+      labels: ['해결 완료','미해결'],
+      datasets: [{ data:[resolved,unresolved], backgroundColor:['#10B981','#F59E0B'], borderWidth:0 }]
+    },
+    options: { plugins:{legend:{position:'bottom'}}, responsive:true }
+  });
+}
+
+async function submitIssue() {
+  const projectId = document.getElementById('issue-project').value;
+  const unitId = document.getElementById('issue-unit').value || null;
+  const equipment = document.getElementById('issue-equipment').value.trim();
+  const type = document.getElementById('issue-type').value;
+  const desc = document.getElementById('issue-desc').value.trim();
+
+  if (!desc) { showMsg('issue-msg','이슈 내용을 입력해 주세요',false); return; }
+
+  const {error} = await sb.from('issues').insert({
+    project_id: projectId, unit_id: unitId,
+    equipment_name: equipment, issue_type: type,
+    description: desc, created_by: currentUserName,
+    user_id: currentUser.id,
+  });
+  if (error) { showMsg('issue-msg','등록 실패: '+error.message,false); return; }
+
+  document.getElementById('issue-equipment').value='';
+  document.getElementById('issue-desc').value='';
+  showMsg('issue-msg','이슈가 등록됐어요!',true);
+  await fetchAllIssues();
+}
+
+async function resolveIssueRecord(id) {
+  await sb.from('issues').update({
+    is_resolved: true,
+    resolved_by: currentUserName,
+    resolved_at: new Date().toISOString(),
+  }).eq('id',id);
+  await fetchAllIssues();
+}
 
 // ── 모달 ──
 let _modalCallback = null;
