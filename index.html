@@ -282,13 +282,22 @@
       <div id="unresolved-issues"><div class="loading">불러오는 중...</div></div>
     </div>
 
-    <!-- 주간 할일 리스트 -->
-    <div>
+    <!-- 이번 주 할일 리스트 -->
+    <div style="margin-bottom:20px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <span style="font-size:15px;font-weight:700">📋 이번 주 할 일</span>
         <span id="week-range" style="font-size:12px;color:var(--muted)"></span>
       </div>
       <div id="weekly-todos"><div class="loading">불러오는 중...</div></div>
+    </div>
+
+    <!-- 다음 주 할일 리스트 -->
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <span style="font-size:15px;font-weight:700">📋 다음 주 할 일</span>
+        <span id="next-week-range" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+      <div id="next-weekly-todos"><div class="loading">불러오는 중...</div></div>
     </div>
   </div>
 
@@ -732,8 +741,8 @@ function filterStatus() {
     const color = getProgressColor(p.pct);
     const statusLabel = getProgressLabel(p.pct);
     return `
-    <div class="pjt-card" onclick="togglePjtCard('${p.id}',this)">
-      <div class="pjt-card-header">
+    <div class="pjt-card">
+      <div class="pjt-card-header" onclick="togglePjtCard('${p.id}',this.closest('.pjt-card'))">
         <div class="pjt-dot" style="background:${color}"></div>
         <div class="pjt-info">
           <div class="pjt-name">${escHtml(p.name)}</div>
@@ -760,21 +769,21 @@ async function togglePjtCard(projectId, card) {
   if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
   if (isOpen) return;
 
-  const p = projects.find(x=>x.id===projectId);
+  const pct = projectProgressMap[projectId] || 0;
+  const color = getProgressColor(pct);
   const units = unitsByProject[projectId] || [];
 
   if (units.length > 0) {
-    // 호기별 탭 구성
     panel.innerHTML = `
       <div style="padding:12px 14px">
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-          <button class="unit-tab active" onclick="loadUnitHistory('${projectId}',null,this)"
-            style="padding:5px 12px;border-radius:20px;border:1.5px solid ${p?.color};background:${p?.color};color:#fff;font-size:12px;font-weight:700;cursor:pointer">
+          <button class="unit-tab active" onclick="event.stopPropagation();loadUnitHistory('${projectId}',null,this)"
+            style="padding:5px 12px;border-radius:20px;border:1.5px solid ${color};background:${color};color:#fff;font-size:12px;font-weight:700;cursor:pointer">
             전체
           </button>
           ${units.map(u=>`
-            <button class="unit-tab" onclick="loadUnitHistory('${projectId}','${u.id}',this)"
-              style="padding:5px 12px;border-radius:20px;border:1.5px solid ${p?.color};background:#fff;color:${p?.color};font-size:12px;font-weight:700;cursor:pointer;text-align:left">
+            <button class="unit-tab" onclick="event.stopPropagation();loadUnitHistory('${projectId}','${u.id}',this)"
+              style="padding:5px 12px;border-radius:20px;border:1.5px solid ${color};background:#fff;color:${color};font-size:12px;font-weight:700;cursor:pointer;text-align:left">
               <div>${escHtml(u.name)}</div>
               ${(u.fab||u.location)?`<div style="font-size:10px;font-weight:400;opacity:.8">${[u.fab,u.location].filter(Boolean).join(' · ')}</div>`:''}
             </button>`).join('')}
@@ -791,13 +800,14 @@ async function togglePjtCard(projectId, card) {
 async function loadUnitHistory(projectId, unitId, btn) {
   // 탭 활성화
   if (btn) {
-    const p = projects.find(x=>x.id===projectId);
+    const pct = projectProgressMap[projectId] || 0;
+    const color = getProgressColor(pct);
     btn.closest('.pjt-history')?.querySelectorAll('.unit-tab').forEach(b => {
       b.style.background = '#fff';
-      b.style.color = p?.color || 'var(--primary)';
+      b.style.color = color;
     });
     if (btn.classList.contains('unit-tab')) {
-      btn.style.background = p?.color || 'var(--primary)';
+      btn.style.background = color;
       btn.style.color = '#fff';
     }
   }
@@ -841,6 +851,7 @@ async function loadCalendar() {
   renderTodoPanel(selectedDate);
   await loadUnresolvedIssues();
   await loadWeeklyTodos();
+  await loadNextWeekTodos();
 }
 
 async function fetchCalendarData() {
@@ -1119,6 +1130,59 @@ async function loadWeeklyTodos() {
     <div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden">
       <div style="padding:10px 14px;background:${isToday?'var(--primary-light)':'#F8FAFC'};display:flex;align-items:center;justify-content:space-between">
         <span style="font-size:13px;font-weight:700;color:${isToday?'var(--primary)':'var(--text)'}">${label}${isToday?' · 오늘':''}</span>
+        <span style="font-size:11px;color:var(--muted)">${doneCnt}/${todos.length} 완료</span>
+      </div>
+      ${todos.map(t=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-top:1px solid var(--border)">
+          <div class="todo-check ${t.is_done?'done':''}" onclick="toggleTodo('${t.id}','${date}',${!t.is_done})">${t.is_done?'✓':''}</div>
+          <span style="flex:1;font-size:13px;${t.is_done?'text-decoration:line-through;color:var(--muted)':''}">${escHtml(t.title)}</span>
+          <span style="font-size:11px;color:var(--muted)">${escHtml(t.author_name||'')}</span>
+        </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+// ── 다음 주 할일 리스트 ──
+async function loadNextWeekTodos() {
+  const el = document.getElementById('next-weekly-todos');
+  const rangeEl = document.getElementById('next-week-range');
+
+  const today = new Date();
+  const dow = today.getDay();
+  const thisMonday = new Date(today); thisMonday.setDate(today.getDate() - (dow===0?6:dow-1));
+  const nextMon = new Date(thisMonday); nextMon.setDate(thisMonday.getDate() + 7);
+  const nextSun = new Date(nextMon); nextSun.setDate(nextMon.getDate() + 6);
+
+  const monStr = toDateStr(nextMon);
+  const sunStr = toDateStr(nextSun);
+  rangeEl.textContent = `${nextMon.getMonth()+1}/${nextMon.getDate()} ~ ${nextSun.getMonth()+1}/${nextSun.getDate()}`;
+
+  const {data} = await sb.from('todos')
+    .select('*')
+    .gte('due_date', monStr)
+    .lte('due_date', sunStr)
+    .order('due_date').order('is_done');
+
+  if (!data||!data.length) {
+    el.innerHTML='<p style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0">다음 주 등록된 할 일이 없어요</p>';
+    return;
+  }
+
+  const DOW_KO = ['일','월','화','수','목','금','토'];
+  const grouped = {};
+  data.forEach(t=>{
+    if (!grouped[t.due_date]) grouped[t.due_date]=[];
+    grouped[t.due_date].push(t);
+  });
+
+  el.innerHTML = Object.entries(grouped).map(([date,todos])=>{
+    const d = new Date(date+'T00:00:00');
+    const label = `${d.getMonth()+1}/${d.getDate()} (${DOW_KO[d.getDay()]})`;
+    const doneCnt = todos.filter(t=>t.is_done).length;
+    return `
+    <div style="background:#fff;border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden">
+      <div style="padding:10px 14px;background:#F8FAFC;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;font-weight:700">${label}</span>
         <span style="font-size:11px;color:var(--muted)">${doneCnt}/${todos.length} 완료</span>
       </div>
       ${todos.map(t=>`
