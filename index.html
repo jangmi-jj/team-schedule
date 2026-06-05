@@ -222,12 +222,12 @@
           <option value="">단계 선택</option>
           <option value="1">1단계 - 납품/정위치</option>
           <option value="2">2단계 - 다이크/지진브라켓</option>
-          <option value="3">3단계 - 유틸리티 턴온</option>
-          <option value="4">4단계 - 전기 턴온</option>
-          <option value="5">5단계 - 인터락테스트</option>
+          <option value="3">3단계 - 전기 턴온</option>
+          <option value="4">4단계 - 인터락테스트/인증</option>
+          <option value="5">5단계 - 유틸리티 턴온</option>
           <option value="6">6단계 - 설비안정화 및 구동</option>
           <option value="7">7단계 - 셋업평가</option>
-          <option value="8">8단계 - 셋업보고서 송부</option>
+          <option value="8">8단계 - 셋업보고서</option>
           <option value="9">9단계 - 종료</option>
         </select>
         <div class="progress-preview" id="progress-preview" style="display:none">
@@ -304,12 +304,12 @@
               <th style="padding:8px 10px;text-align:center;white-space:nowrap;border:1px solid #6366F1">설비수량</th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">1단계<div style="font-size:9px;font-weight:400;opacity:.8">납품/정위치</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">2단계<div style="font-size:9px;font-weight:400;opacity:.8">다이크/지진브라켓</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">3단계<div style="font-size:9px;font-weight:400;opacity:.8">유틸리티 턴온</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">4단계<div style="font-size:9px;font-weight:400;opacity:.8">전기 턴온</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">5단계<div style="font-size:9px;font-weight:400;opacity:.8">인터락테스트</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">3단계<div style="font-size:9px;font-weight:400;opacity:.8">전기 턴온</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">4단계<div style="font-size:9px;font-weight:400;opacity:.8">인터락테스트/인증</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">5단계<div style="font-size:9px;font-weight:400;opacity:.8">유틸리티 턴온</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">6단계<div style="font-size:9px;font-weight:400;opacity:.8">설비안정화 및 구동</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">7단계<div style="font-size:9px;font-weight:400;opacity:.8">셋업평가</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">8단계<div style="font-size:9px;font-weight:400;opacity:.8">셋업보고서 송부</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">8단계<div style="font-size:9px;font-weight:400;opacity:.8">셋업보고서</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">9단계<div style="font-size:9px;font-weight:400;opacity:.8">종료</div></th>
             </tr>
           </thead>
@@ -472,7 +472,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // 단계별 진척률
 const STAGE_PROGRESS = [0, 0, 10, 25, 35, 45, 55, 70, 90, 100];
-const STAGE_NAMES = ['','납품/정위치','다이크/지진브라켓','유틸리티 턴온','전기 턴온','인터락테스트','설비안정화 및 구동','셋업평가','셋업보고서 송부','종료'];
+const STAGE_NAMES = ['','납품/정위치','다이크/지진브라켓','전기 턴온','인터락테스트/인증','유틸리티 턴온','설비안정화 및 구동','셋업평가','셋업보고서','종료'];
 
 // 진척률 기준 색상
 function getProgressColor(pct) {
