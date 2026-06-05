@@ -222,12 +222,12 @@
           <option value="">단계 선택</option>
           <option value="1">1단계 - 납품/정위치</option>
           <option value="2">2단계 - 다이크/지진브라켓</option>
-          <option value="3">3단계 - 전기 턴온</option>
-          <option value="4">4단계 - 인터락테스트/인증</option>
-          <option value="5">5단계 - 유틸리티 턴온</option>
+          <option value="3">3단계 - 유틸리티 턴온</option>
+          <option value="4">4단계 - 전기 턴온</option>
+          <option value="5">5단계 - 인터락테스트</option>
           <option value="6">6단계 - 설비안정화 및 구동</option>
           <option value="7">7단계 - 셋업평가</option>
-          <option value="8">8단계 - 셋업보고서</option>
+          <option value="8">8단계 - 셋업보고서 송부</option>
           <option value="9">9단계 - 종료</option>
         </select>
         <div class="progress-preview" id="progress-preview" style="display:none">
@@ -303,13 +303,13 @@
               <th style="padding:8px 10px;text-align:center;white-space:nowrap;border:1px solid #6366F1">진행률</th>
               <th style="padding:8px 10px;text-align:center;white-space:nowrap;border:1px solid #6366F1">설비수량</th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">1단계<div style="font-size:9px;font-weight:400;opacity:.8">납품/정위치</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">2단계<div style="font-size:9px;font-weight:400;opacity:.8">다이크/지진</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">3단계<div style="font-size:9px;font-weight:400;opacity:.8">유틸리티</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">2단계<div style="font-size:9px;font-weight:400;opacity:.8">다이크/지진브라켓</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">3단계<div style="font-size:9px;font-weight:400;opacity:.8">유틸리티 턴온</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">4단계<div style="font-size:9px;font-weight:400;opacity:.8">전기 턴온</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">5단계<div style="font-size:9px;font-weight:400;opacity:.8">인터락</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">6단계<div style="font-size:9px;font-weight:400;opacity:.8">설비안정화</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">5단계<div style="font-size:9px;font-weight:400;opacity:.8">인터락테스트</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">6단계<div style="font-size:9px;font-weight:400;opacity:.8">설비안정화 및 구동</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">7단계<div style="font-size:9px;font-weight:400;opacity:.8">셋업평가</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">8단계<div style="font-size:9px;font-weight:400;opacity:.8">셋업보고서</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">8단계<div style="font-size:9px;font-weight:400;opacity:.8">셋업보고서 송부</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">9단계<div style="font-size:9px;font-weight:400;opacity:.8">종료</div></th>
             </tr>
           </thead>
@@ -729,8 +729,8 @@ async function viewProjectHistory(id, name, color) {
       </div>
       ${log.stage ? `<span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)</span>` : ''}
       ${log.equipment ? `<div style="font-size:11px;color:var(--muted);margin-bottom:4px">📍 ${escHtml(log.equipment)}</div>` : ''}
-      <div class="history-content">${escHtml(log.content)}</div>
-      ${log.issue ? `<div class="history-issue">⚠️ ${escHtml(log.issue)}</div>` : ''}
+      <div class="history-content">${escHtmlBr(log.content)}</div>
+      ${log.issue ? `<div class="history-issue">⚠️ ${escHtmlBr(log.issue)}</div>` : ''}
       ${log.customer_manager ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">👤 고객담당자: ${escHtml(log.customer_manager)}</div>` : ''}
     </div>`).join('');
 }
@@ -800,8 +800,8 @@ async function loadMyRecentLogs() {
         </div>
       </div>
       ${log.equipment?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">📍 ${escHtml(log.equipment)}</div>`:''}
-      <div class="log-content-text">${escHtml(log.content)}</div>
-      ${log.issue?`<div class="log-issue-text">⚠️ ${escHtml(log.issue)}</div>`:''}
+      <div class="log-content-text">${escHtmlBr(log.content)}</div>
+      ${log.issue?`<div class="log-issue-text">⚠️ ${escHtmlBr(log.issue)}</div>`:''}
     </div>`).join('');
 }
 
@@ -1134,8 +1134,8 @@ async function loadUnitHistory(projectId, unitId, btn) {
       </div>
       ${log.stage?`<span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)</span>`:''}
       ${log.equipment?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">📍 ${escHtml(log.equipment)}</div>`:''}
-      <div class="history-content">${escHtml(log.content)}</div>
-      ${log.issue?`<div class="history-issue">⚠️ ${escHtml(log.issue)}</div>`:''}
+      <div class="history-content">${escHtmlBr(log.content)}</div>
+      ${log.issue?`<div class="history-issue">⚠️ ${escHtmlBr(log.issue)}</div>`:''}
       ${log.customer_manager?`<div style="font-size:11px;color:var(--muted);margin-top:4px">👤 ${escHtml(log.customer_manager)}</div>`:''}
     </div>`).join('');
 }
@@ -1386,7 +1386,7 @@ async function loadUnresolvedIssues() {
             <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${log.projects?.color}20;color:${log.projects?.color}">${escHtml(log.projects?.name||'')}</span>
             <span style="font-size:11px;color:var(--muted)">${log.log_date} · ${escHtml(log.author_name||'')}</span>
           </div>
-          <div style="font-size:13px;color:#D97706;font-weight:600;margin-bottom:2px">⚠️ ${escHtml(log.issue)}</div>
+          <div style="font-size:13px;color:#D97706;font-weight:600;margin-bottom:2px">⚠️ ${escHtmlBr(log.issue)}</div>
           ${log.equipment?`<div style="font-size:11px;color:var(--muted)">📍 ${escHtml(log.equipment)}</div>`:''}
         </div>
         <button onclick="resolveIssue('${log.id}')"
@@ -1745,7 +1745,7 @@ function filterIssues() {
               ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:${TYPE_COLOR[i.issue_type]||'#94A3B8'}20;color:${TYPE_COLOR[i.issue_type]||'#94A3B8'};display:inline-block">${escHtml(i.issue_type)}</span>`
               : '-'}
           </td>
-          <td style="padding:10px 10px;font-size:12px;line-height:1.6;word-break:keep-all">${escHtml(i.issue)}</td>
+          <td style="padding:10px 10px;font-size:12px;line-height:1.6;word-break:keep-all">${escHtmlBr(i.issue)}</td>
           <td style="padding:10px 10px;font-size:10px;color:var(--muted)">
             <div>${escHtml(i.author_name||'')}</div>
             <div>${i.log_date||''}</div>
@@ -1993,6 +1993,7 @@ function closeModal() { document.getElementById('confirm-modal').classList.add('
 function toDateStr(d) { return d.toISOString().split('T')[0]; }
 function formatDateKo(s) { const d=new Date(s+'T00:00:00'); return `${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일`; }
 function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escHtmlBr(s) { return escHtml(s).replace(/\n/g,'<br>'); }
 function showMsg(id, msg, ok) {
   const el = document.getElementById(id);
   el.textContent = msg;
