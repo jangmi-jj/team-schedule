@@ -193,9 +193,9 @@
     </div>
   </div>
   <div class="tab-nav">
-    <button class="active" onclick="switchTab('input')">✍️ 작업 입력</button>
+    <button class="active" onclick="switchTab('calendar')">📅 캘린더</button>
     <button onclick="switchTab('status')">📊 PJT 현황</button>
-    <button onclick="switchTab('calendar')">📅 캘린더</button>
+    <button onclick="switchTab('input')">✍️ 작업 입력</button>
     <button onclick="switchTab('daily')">📋 일일 현황</button>
     <button onclick="switchTab('issues')">🔧 이슈 관리</button>
     <button onclick="switchTab('projects')">🗂 PJT 관리</button>
@@ -588,6 +588,9 @@ async function onLoggedIn(user) {
   await loadProjects();
   await loadAllUnits();
   await loadMyRecentLogs();
+
+  // 첫 화면을 캘린더로
+  switchTab('calendar');
 }
 
 // ── 탭 ──
@@ -596,7 +599,7 @@ function switchTab(tab) {
     document.getElementById('tab-'+t).classList.toggle('hidden', t!==tab);
   });
   document.querySelectorAll('.tab-nav button').forEach((b,i) => {
-    b.classList.toggle('active', ['input','status','calendar','daily','issues','projects'][i]===tab);
+    b.classList.toggle('active', ['calendar','status','input','daily','issues','projects'][i]===tab);
   });
   if (tab==='status') { loadStatus(); loadFabSummary(); }
   if (tab==='calendar') loadCalendar();
