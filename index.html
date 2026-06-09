@@ -1028,21 +1028,49 @@ async function loadStatus() {
   const el = document.getElementById('status-list');
   el.innerHTML = '<div class="loading">불러오는 중...</div>';
 
-  const {data:logs} = await sb.from('work_logs').select('project_id,stage');
-  const maxStageMap = {};
+  // 호기별 최고 단계 조회
+  const {data:logs} = await sb.from('work_logs').select('project_id,unit_id,stage');
+
+  // unit_id별 최고 단계
+  const maxStageByUnit = {};
+  // project_id별 최고 단계 (호기 없는 작업 로그 대비)
+  const maxStageByProject = {};
+
   (logs||[]).forEach(l => {
     if (!l.stage) return;
-    if (!maxStageMap[l.project_id] || l.stage > maxStageMap[l.project_id])
-      maxStageMap[l.project_id] = l.stage;
+    // 호기별
+    if (l.unit_id) {
+      if (!maxStageByUnit[l.unit_id] || l.stage > maxStageByUnit[l.unit_id])
+        maxStageByUnit[l.unit_id] = l.stage;
+    }
+    // 프로젝트별 (fallback)
+    if (!maxStageByProject[l.project_id] || l.stage > maxStageByProject[l.project_id])
+      maxStageByProject[l.project_id] = l.stage;
   });
 
-  statusData = projects.map(p => ({
-    ...p,
-    stage: maxStageMap[p.id] || 0,
-    pct: STAGE_PROGRESS[maxStageMap[p.id] || 0] || 0,
-  }));
+  // 프로젝트별 진척률 계산 (호기별 평균)
+  statusData = projects.map(p => {
+    const units = unitsByProject[p.id] || [];
+    let pct = 0;
 
-  // 전역 진척률 맵 업데이트
+    if (units.length > 0) {
+      // 호기가 있으면 → 각 호기 최고 단계의 진척률 평균
+      const total = units.reduce((sum, u) => {
+        return sum + (STAGE_PROGRESS[maxStageByUnit[u.id] || 0] || 0);
+      }, 0);
+      pct = Math.round(total / units.length);
+    } else {
+      // 호기 미등록이면 → 프로젝트 최고 단계 기준
+      pct = STAGE_PROGRESS[maxStageByProject[p.id] || 0] || 0;
+    }
+
+    // 대표 단계: 프로젝트 내 가장 높은 단계
+    const maxStage = maxStageByProject[p.id] || 0;
+
+    return { ...p, stage: maxStage, pct };
+  });
+
+  // 전역 진척률 맵 업데이트 (일일 현황 탭 등에서 공유)
   projectProgressMap = {};
   statusData.forEach(p => { projectProgressMap[p.id] = p.pct; });
 
@@ -1695,6 +1723,10 @@ async function loadDailyTab() {
   if (!document.getElementById('daily-date').value) {
     document.getElementById('daily-date').value = today;
   }
+  // projectProgressMap이 비어있으면 먼저 로드
+  if (!Object.keys(projectProgressMap).length) {
+    await loadStatus();
+  }
   await loadDailyDateList();
   await loadDailyReport();
 }
@@ -1820,13 +1852,16 @@ async function loadDailyReport() {
       return `
       <div style="background:#fff;border:1px solid var(--border);border-radius:14px;margin-bottom:14px;overflow:hidden">
         <!-- 프로젝트 헤더 -->
-        <div style="padding:12px 16px;background:#FAFAFA;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px">
+        <div onclick="goToProjectHistory('${g.project?.id}')"
+          style="padding:12px 16px;background:#FAFAFA;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .15s"
+          onmouseover="this.style.background='#EEF2FF'" onmouseout="this.style.background='#FAFAFA'">
           <div style="width:12px;height:12px;border-radius:50%;background:${color};flex-shrink:0"></div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(g.project?.name||'알 수 없는 프로젝트')}</div>
+            <div style="font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--primary)">${escHtml(g.project?.name||'알 수 없는 프로젝트')}</div>
           </div>
           <span style="font-size:11px;font-weight:700;color:${color};background:${color}15;padding:2px 8px;border-radius:6px">${pct}%</span>
           <span style="font-size:11px;color:var(--muted)">${g.logs.length}건</span>
+          <span style="font-size:11px;color:var(--primary)">히스토리 →</span>
         </div>
 
         <!-- 작업자별 내용 -->
@@ -1854,6 +1889,22 @@ async function loadDailyReport() {
           </div>`).join('')}
       </div>`;
     }).join('')}`;
+}
+
+async function goToProjectHistory(projectId) {
+  if (!projectId) return;
+  // PJT 현황 탭으로 이동
+  switchTab('status');
+  // 로딩 완료 후 해당 프로젝트 카드 자동 오픈
+  await new Promise(r => setTimeout(r, 400));
+  const card = document.getElementById('hist-'+projectId)?.closest('.pjt-card');
+  if (card) {
+    card.scrollIntoView({ behavior:'smooth', block:'center' });
+    const panel = document.getElementById('hist-'+projectId);
+    if (panel && !panel.classList.contains('open')) {
+      togglePjtCard(projectId, card);
+    }
+  }
 }
 
 // ── 이슈 관리 ──
