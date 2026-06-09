@@ -1789,7 +1789,7 @@ async function loadDailyReport() {
   el.innerHTML = '<div class="loading">불러오는 중...</div>';
 
   const {data} = await sb.from('work_logs')
-    .select('*, projects(name,color), equipment_units(name,fab,location)')
+    .select('*, projects(id,name,color), equipment_units(name,fab,location)')
     .eq('log_date', date)
     .order('project_id')
     .order('created_at');
@@ -1811,7 +1811,7 @@ async function loadDailyReport() {
   const grouped = {};
   data.forEach(log => {
     const pid = log.project_id;
-    if (!grouped[pid]) grouped[pid] = { project: log.projects, logs: [] };
+    if (!grouped[pid]) grouped[pid] = { project: log.projects, projectId: pid, logs: [] };
     grouped[pid].logs.push(log);
   });
 
@@ -1839,7 +1839,7 @@ async function loadDailyReport() {
 
     <!-- 프로젝트별 작업 내용 -->
     ${Object.values(grouped).map(g => {
-      const pct = projectProgressMap[g.project?.id] || 0;
+      const pct = projectProgressMap[g.projectId] || projectProgressMap[g.project?.id] || 0;
       const color = getProgressColor(pct);
       // 작업자별 그룹
       const byWorker = {};
@@ -1893,16 +1893,28 @@ async function loadDailyReport() {
 
 async function goToProjectHistory(projectId) {
   if (!projectId) return;
-  // PJT 현황 탭으로 이동
-  switchTab('status');
-  // 로딩 완료 후 해당 프로젝트 카드 자동 오픈
-  await new Promise(r => setTimeout(r, 400));
-  const card = document.getElementById('hist-'+projectId)?.closest('.pjt-card');
+
+  // 탭 버튼 활성화 및 탭 전환 (loadStatus 직접 호출)
+  ['input','status','calendar','daily','issues','projects'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('hidden', t!=='status');
+  });
+  document.querySelectorAll('.tab-nav button').forEach((b,i) => {
+    b.classList.toggle('active', ['input','status','calendar','daily','issues','projects'][i]==='status');
+  });
+
+  // 로딩 기다림
+  await loadStatus();
+  await loadFabSummary();
+
+  // 카드 찾아서 펼치기
+  const panel = document.getElementById('hist-'+projectId);
+  const card = panel?.closest('.pjt-card');
   if (card) {
+    // 스크롤 이동
     card.scrollIntoView({ behavior:'smooth', block:'center' });
-    const panel = document.getElementById('hist-'+projectId);
-    if (panel && !panel.classList.contains('open')) {
-      togglePjtCard(projectId, card);
+    // 아직 안 펼쳐져 있으면 펼치기
+    if (!panel.classList.contains('open')) {
+      await togglePjtCard(projectId, card);
     }
   }
 }
