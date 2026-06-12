@@ -163,8 +163,11 @@ const SUB_STAGES = {
   2:[{id:'2-1',name:'다이크 납품'},{id:'2-2',name:'다이크 설치'},{id:'2-3',name:'다이크 에폭시'},{id:'2-4',name:'다이크 침수테스트'},{id:'2-5',name:'지진브라켓 설치'}],
   3:[{id:'3-1',name:'전기/LAN 턴온'},{id:'3-2',name:'LAN 통신 확인'}],
   4:[{id:'4-1',name:'인터락테스트'}],
-  5:[{id:'5-1',name:'EXH 턴온'},{id:'5-2',name:'Bulk 턴온'},{id:'5-3',name:'Drain 턴온'},{id:'5-4',name:'UPW 턴온'},{id:'5-5',name:'FOUP 센터 및 수평확인'},{id:'5-6',name:'OHT 인증'},{id:'5-7',name:'PIO(E84) 인증'},{id:'5-8',name:'로봇 티칭'}],
-  6:[{id:'6-1',name:'로컬테스트'},{id:'6-2',name:'용액 설치'},{id:'6-3',name:'설비안정화'},{id:'6-4',name:'STD 측정'},{id:'6-5',name:'샘플 측정'}],
+  5:[
+    {id:'5-1',name:'유틸리티 턴온',type:'multi',items:['EXH','Bulk','UPW','Drain']},
+    {id:'5-2',name:'인증',type:'multi',items:['FOUP 센터/수평','OHT','PIO(E84)']},
+  ],
+  6:[{id:'6-1',name:'로컬테스트'},{id:'6-2',name:'로봇 티칭'},{id:'6-3',name:'용액 설치 및 안정화'}],
   7:[{id:'7-1',name:'신뢰성 평가'},{id:'7-2',name:'고객사 요청 평가'}],
   8:[],9:[],
 };
@@ -313,13 +316,20 @@ function buildFabMap(){
   // 절충안: sub_stage 기록 없는 단계는 전부 완료로 간주
   function effectiveSubs(unitId){
     const recorded=subStagesByUnit[unitId]||new Set();
-    const eff=new Set(recorded);
+    const eff=new Set();
     const stagesWithLog=new Set(allLogs.filter(l=>l.unit_id===unitId&&l.stage>0).map(l=>l.stage));
     stagesWithLog.forEach(s=>{
       const subs=SUB_STAGES[s]||[];
       if(!subs.length)return;
-      const hasAny=[...recorded].some(id=>id.startsWith(s+'-'));
-      if(!hasAny)subs.forEach(sub=>eff.add(sub.id));
+      if(s===5){
+        // 5단계: '5-1','5-2' 완료 확정 행만 완료로 인정
+        subs.forEach(sub=>{if(recorded.has(sub.id))eff.add(sub.id);});
+      } else {
+        // 그 외: sub_stage 기록 없으면 전부 완료, 있으면 기록된 것만
+        const hasAny=[...recorded].some(id=>id.startsWith(s+'-')&&!id.includes('::'));
+        if(!hasAny)subs.forEach(sub=>eff.add(sub.id));
+        else subs.forEach(sub=>{if(recorded.has(sub.id))eff.add(sub.id);});
+      }
     });
     return eff;
   }
