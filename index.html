@@ -1095,14 +1095,37 @@ async function openEditLogModal(id, fromProjectId='', fromUnitId='') {
         ).join('')}
       </select>
       <div id="edit-sub-stage-group" style="margin-top:8px;${(SUB_STAGES[log.stage]||[]).length ? '' : 'display:none'}">
-        <label style="font-size:12px;color:var(--muted);margin-bottom:4px">세부 단계 <span style="font-weight:400">(선택사항)</span></label>
+        <label style="font-size:12px;color:var(--muted);margin-bottom:6px">세부 단계 <span style="font-weight:400">(선택사항)</span></label>
         ${log.stage === 5
-          ? `<select id="edit-log-sub-stage">
-              <option value="">세부 단계 선택</option>
-              <option value="5-1" ${log.sub_stage==='5-1'?'selected':''}>5-1 - 유틸리티 턴온</option>
-              <option value="5-2" ${log.sub_stage==='5-2'?'selected':''}>5-2 - 인증</option>
-             </select>
-             <p style="font-size:11px;color:var(--muted);margin-top:4px">※ 세부항목 체크박스는 새 작업 입력에서만 지원돼요</p>`
+          ? (() => {
+              // 기존 sub_stage 파싱 (5-1::EXH 형태)
+              const currentSub = log.sub_stage || '';
+              const currentSubBase = currentSub.split('::')[0]; // '5-1' or '5-2'
+              const currentItem = currentSub.includes('::') ? currentSub.split('::')[1] : '';
+              return SUB_STAGES[5].map(sub => `
+                <div style="margin-bottom:10px">
+                  <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:5px">${sub.id} - ${sub.name}</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px">
+                    ${(sub.items||[]).map(item => {
+                      const val = sub.id+'::'+item;
+                      const checked = (currentSub===val || (currentSubBase===sub.id && currentItem===item)) ? 'checked' : '';
+                      return `<label style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1.5px solid ${checked?'var(--primary)':'var(--border)'};border-radius:8px;cursor:pointer;font-size:12px;background:${checked?'var(--primary-light)':'#fff'}"
+                        onmouseover="this.style.borderColor='var(--primary)'"
+                        onmouseout="if(!this.querySelector('input').checked)this.style.cssText='border-color:var(--border);background:#fff;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px'">
+                        <input type="checkbox" name="edit-sub-item" value="${val}" ${checked}
+                          style="width:14px;height:14px;accent-color:var(--primary)"
+                          onchange="onEditMultiCheckChange(this)">
+                        ${item}
+                      </label>`;
+                    }).join('')}
+                  </div>
+                </div>`).join('') +
+              `<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+                <button type="button" onclick="selectAllEditMulti()" style="padding:5px 10px;border-radius:7px;border:1.5px solid var(--primary);background:#fff;color:var(--primary);font-size:12px;font-weight:600;cursor:pointer">전체 선택</button>
+                <span id="edit-multi-complete-indicator" style="font-size:11px;color:var(--success)"></span>
+              </div>
+              <input type="hidden" id="edit-log-sub-stage" value="${currentSub}">`;
+            })()
           : `<select id="edit-log-sub-stage">
               <option value="">세부 단계 선택</option>
               ${(SUB_STAGES[log.stage]||[]).map(s=>
@@ -1140,18 +1163,84 @@ async function openEditLogModal(id, fromProjectId='', fromUnitId='') {
 function updateEditSubStageSelect(stageVal, currentSubStage) {
   const stage = parseInt(stageVal) || 0;
   const group = document.getElementById('edit-sub-stage-group');
-  const sel = document.getElementById('edit-log-sub-stage');
-  if (!group || !sel) return;
+  if (!group) return;
   const subs = SUB_STAGES[stage] || [];
   if (!subs.length) {
     group.style.display = 'none';
     return;
   }
   group.style.display = 'block';
-  sel.innerHTML = '<option value="">세부 단계 선택</option>' +
-    subs.map(s =>
-      `<option value="${s.id}" ${currentSubStage===s.id?'selected':''}>${s.id} - ${s.name}</option>`
-    ).join('');
+
+  if (stage === 5) {
+    // 5단계: 체크박스 렌더링
+    const label = group.querySelector('label');
+    // label 다음 내용 교체
+    const existingContent = group.querySelector('#edit-5stage-content');
+    const container = existingContent || document.createElement('div');
+    container.id = 'edit-5stage-content';
+    container.innerHTML = subs.map(sub => `
+      <div style="margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:5px">${sub.id} - ${sub.name}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${(sub.items||[]).map(item => {
+            const val = sub.id+'::'+item;
+            const checked = currentSubStage === val ? 'checked' : '';
+            return `<label style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1.5px solid ${checked?'var(--primary)':'var(--border)'};border-radius:8px;cursor:pointer;font-size:12px;background:${checked?'var(--primary-light)':'#fff'}">
+              <input type="checkbox" name="edit-sub-item" value="${val}" ${checked}
+                style="width:14px;height:14px;accent-color:var(--primary)"
+                onchange="onEditMultiCheckChange(this)">
+              ${item}
+            </label>`;
+          }).join('')}
+        </div>
+      </div>`).join('') +
+    `<div style="margin-top:6px;display:flex;gap:8px">
+      <button type="button" onclick="selectAllEditMulti()" style="padding:5px 10px;border-radius:7px;border:1.5px solid var(--primary);background:#fff;color:var(--primary);font-size:12px;font-weight:600;cursor:pointer">전체 선택</button>
+    </div>
+    <input type="hidden" id="edit-log-sub-stage" value="${currentSubStage||''}">`;
+    if (!existingContent) group.appendChild(container);
+  } else {
+    // 그 외: 드롭다운
+    const existing = group.querySelector('#edit-5stage-content');
+    if (existing) existing.remove();
+    let sel = group.querySelector('#edit-log-sub-stage');
+    if (!sel || sel.type === 'hidden') {
+      sel = document.createElement('select');
+      sel.id = 'edit-log-sub-stage';
+      group.appendChild(sel);
+    }
+    sel.innerHTML = '<option value="">세부 단계 선택</option>' +
+      subs.map(s =>
+        `<option value="${s.id}" ${currentSubStage===s.id?'selected':''}>${s.id} - ${s.name}</option>`
+      ).join('');
+  }
+}
+
+function onEditMultiCheckChange(checkbox) {
+  const label = checkbox.closest('label');
+  if (checkbox.checked) {
+    label.style.borderColor = 'var(--primary)';
+    label.style.background = 'var(--primary-light)';
+  } else {
+    label.style.borderColor = 'var(--border)';
+    label.style.background = '#fff';
+  }
+  // hidden input 업데이트 (마지막 체크된 값으로)
+  const checked = [...document.querySelectorAll('input[name="edit-sub-item"]:checked')];
+  const hidden = document.getElementById('edit-log-sub-stage');
+  if (hidden) hidden.value = checked.length ? checked[checked.length-1].value : '';
+}
+
+function selectAllEditMulti() {
+  document.querySelectorAll('input[name="edit-sub-item"]').forEach(cb => {
+    cb.checked = true;
+    const label = cb.closest('label');
+    label.style.borderColor = 'var(--primary)';
+    label.style.background = 'var(--primary-light)';
+  });
+  const checked = [...document.querySelectorAll('input[name="edit-sub-item"]:checked')];
+  const hidden = document.getElementById('edit-log-sub-stage');
+  if (hidden && checked.length) hidden.value = checked[checked.length-1].value;
 }
 
 async function saveEditLog(id, fromProjectId='', fromUnitId='') {
@@ -1169,10 +1258,58 @@ async function saveEditLog(id, fromProjectId='', fromUnitId='') {
     return;
   }
 
-  const {error} = await sb.from('work_logs').update({
-    log_date: date, unit_id: unitId, stage, sub_stage: subStage,
-    content, issue_type: issueType, issue,
-  }).eq('id', id);
+  // 5단계일 때 체크된 모든 항목 처리
+  let saveError = null;
+  if (stage === 5) {
+    const checkedItems = [...document.querySelectorAll('input[name="edit-sub-item"]:checked')];
+    if (checkedItems.length > 1) {
+      // 여러 항목 체크 시 - 현재 행 업데이트 + 추가 행 insert
+      const {error: e1} = await sb.from('work_logs').update({
+        log_date: date, unit_id: unitId, stage, sub_stage: checkedItems[0].value,
+        content, issue_type: issueType, issue,
+      }).eq('id', id);
+      saveError = e1;
+      if (!saveError && checkedItems.length > 1) {
+        const extraRows = checkedItems.slice(1).map(cb => ({
+          project_id: (async () => {
+            const {data} = await sb.from('work_logs').select('project_id').eq('id',id).single();
+            return data?.project_id;
+          })(),
+          user_id: currentUser.id, author_name: currentUserName,
+          content, log_date: date, stage: 5, sub_stage: cb.value,
+          issue, issue_type: issueType, unit_id: unitId,
+        }));
+      }
+      // 완료 확정 행 업데이트
+      const completedSubs = [...new Set(checkedItems.map(cb => cb.value.split('::')[0]))];
+      const {data: origLog} = await sb.from('work_logs').select('project_id').eq('id',id).single();
+      if (origLog) {
+        for (const subId of completedSubs) {
+          const items = checkedItems.filter(cb=>cb.value.startsWith(subId+'::'));
+          await sb.from('work_logs').insert({
+            project_id: origLog.project_id, user_id: currentUser.id,
+            author_name: currentUserName,
+            content: `[완료] ${subId} (${items.map(cb=>cb.value.split('::')[1]).join(', ')})`,
+            log_date: date, stage: 5, sub_stage: subId,
+            issue: '', issue_type: '', unit_id: unitId,
+          });
+        }
+      }
+    } else {
+      const {error: e1} = await sb.from('work_logs').update({
+        log_date: date, unit_id: unitId, stage, sub_stage: subStage,
+        content, issue_type: issueType, issue,
+      }).eq('id', id);
+      saveError = e1;
+    }
+  } else {
+    const {error: e1} = await sb.from('work_logs').update({
+      log_date: date, unit_id: unitId, stage, sub_stage: subStage,
+      content, issue_type: issueType, issue,
+    }).eq('id', id);
+    saveError = e1;
+  }
+  const error = saveError;
 
   if (error) {
     const msg = document.getElementById('edit-log-msg');
