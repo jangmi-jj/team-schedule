@@ -185,12 +185,17 @@ function isOverdue(dateStr){if(!dateStr)return false;const today=new Date();toda
 // ── URL 파라미터 ──
 function getUrlFabs(){
   const p=new URLSearchParams(location.search).get('fabs');
-  return p ? p.split(',').map(f=>f.trim()).filter(Boolean) : null;
+  if(p) return p.split(',').map(f=>decodeURIComponent(f.trim())).filter(Boolean);
+  // URLSearchParams가 & 때문에 깨지는 경우 raw 파싱으로 fallback
+  const raw=location.search;
+  const match=raw.match(/[?&]fabs=([^&]*)/);
+  if(match) return decodeURIComponent(match[1]).split(',').map(f=>f.trim()).filter(Boolean);
+  return null;
 }
 function buildShareUrl(){
   const shown=[...visibleFabs];
   const base=location.href.split('?')[0];
-  return shown.length ? `${base}?fabs=${shown.join(',')}` : base;
+  return shown.length ? `${base}?fabs=${shown.map(f=>encodeURIComponent(f)).join(',')}` : base;
 }
 function copyShareUrl(){
   const url=buildShareUrl();
