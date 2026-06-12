@@ -1050,16 +1050,47 @@ async function saveEditLog(id, fromProjectId='', fromUnitId='') {
   closeModal();
   await loadMyRecentLogs();
 
-  // 히스토리에서 수정한 경우 → 해당 히스토리 갱신
+  // 히스토리에서 수정한 경우 → 해당 히스토리만 갱신 (카드 접힘 없이)
   if (fromProjectId) {
     const unitIdVal = fromUnitId || null;
     const btn = document.querySelector(`#unit-hist-${fromProjectId}`)?.previousElementSibling?.querySelector('.unit-tab.active');
     await loadUnitHistory(fromProjectId, unitIdVal, btn);
+    return; // 히스토리 갱신 후 전체 재렌더링 스킵
   }
 
-  // PJT 현황이 열려있으면 갱신
+  // PJT 현황이 열려있으면 → 열린 카드 상태 유지하며 갱신
   if (!document.getElementById('tab-status').classList.contains('hidden')) {
-    loadStatus(); loadFabSummary();
+    // 현재 펼쳐진 프로젝트 카드 목록 저장
+    const openPanels = [...document.querySelectorAll('.pjt-history.open')]
+      .map(p => p.id.replace('hist-', ''));
+
+    // 현재 각 카드의 활성 호기탭 저장
+    const activeUnitTabs = {};
+    openPanels.forEach(pid => {
+      const activeBtn = document.querySelector(`#unit-hist-${pid}`)
+        ?.previousElementSibling?.querySelector('.unit-tab.active');
+      if (activeBtn) {
+        const match = activeBtn.getAttribute('onclick')?.match(/'([^']+)','([^']+)'/);
+        activeUnitTabs[pid] = match ? match[2] : null;
+      }
+    });
+
+    await loadStatus();
+    await loadFabSummary();
+
+    // 펼쳐진 카드 복원
+    for (const pid of openPanels) {
+      const panel = document.getElementById('hist-' + pid);
+      const card = panel?.closest('.pjt-card');
+      if (card && panel && !panel.classList.contains('open')) {
+        await togglePjtCard(pid, card);
+        if (activeUnitTabs[pid]) {
+          await new Promise(r => setTimeout(r, 100));
+          const unitBtn = panel.querySelector(`.unit-tab[onclick*="${activeUnitTabs[pid]}"]`);
+          if (unitBtn) unitBtn.click();
+        }
+      }
+    }
   }
 }
 
