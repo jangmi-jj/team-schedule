@@ -1070,7 +1070,7 @@ async function loadFabSummary() {
 
   // unit_id별 최대 단계
   const maxStageByUnit = {};
-  // unit_id별 완료된 세부단계 집합
+  // unit_id별 완료된 세부단계 집합 (실제 기록된 것)
   const subStagesByUnit = {}; // { unit_id: Set(['1-1','1-2',...]) }
   (logs||[]).forEach(l => {
     if (!maxStageByUnit[l.unit_id] || l.stage > maxStageByUnit[l.unit_id]) {
@@ -1082,13 +1082,38 @@ async function loadFabSummary() {
     }
   });
 
+  // 절충안: sub_stage 기록이 하나도 없는 단계 → 해당 단계 100% 완료로 간주
+  //         sub_stage 기록이 하나라도 있는 단계 → 기록된 것만 완료로 계산
+  function buildEffectiveSubStages(unitId) {
+    const recorded = subStagesByUnit[unitId] || new Set();
+    const effective = new Set(recorded);
+
+    // 작업 기록이 있는 모든 단계를 순회
+    const stagesWithLog = new Set(
+      (logs||[]).filter(l => l.unit_id === unitId && l.stage > 0).map(l => l.stage)
+    );
+
+    stagesWithLog.forEach(s => {
+      const subs = SUB_STAGES[s] || [];
+      if (!subs.length) return;
+      // 해당 단계에 sub_stage 기록이 하나도 없으면 → 전부 완료로 간주
+      const hasAnySubRecord = [...recorded].some(id => id.startsWith(s + '-'));
+      if (!hasAnySubRecord) {
+        subs.forEach(sub => effective.add(sub.id));
+      }
+      // sub_stage 기록이 있으면 → 기록된 것만 유지 (이미 effective에 들어있음)
+    });
+
+    return effective;
+  }
+
   // FAB별 그룹핑
   const fabMap = {}; // { fabName: { total, units: [{id, maxStage}] } }
   allUnits.forEach(u => {
     const fab = u.fab || '미지정';
     if (!fabMap[fab]) fabMap[fab] = { total:0, units:[] };
     fabMap[fab].total++;
-    fabMap[fab].units.push({ id:u.id, maxStage: maxStageByUnit[u.id] || 0, subStages: subStagesByUnit[u.id] || new Set() });
+    fabMap[fab].units.push({ id:u.id, maxStage: maxStageByUnit[u.id] || 0, subStages: buildEffectiveSubStages(u.id) });
   });
 
   if (!Object.keys(fabMap).length) {
@@ -1097,7 +1122,7 @@ async function loadFabSummary() {
   }
 
   // 전체 합계 행 데이터
-  const allUnitsFlat = allUnits.map(u => ({ id:u.id, maxStage: maxStageByUnit[u.id]||0, subStages: subStagesByUnit[u.id] || new Set() }));
+  const allUnitsFlat = allUnits.map(u => ({ id:u.id, maxStage: maxStageByUnit[u.id]||0, subStages: buildEffectiveSubStages(u.id) }));
   const totalRow = buildFabRow('전체', allUnitsFlat, true);
 
   const rows = Object.entries(fabMap)
