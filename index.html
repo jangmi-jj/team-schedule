@@ -332,12 +332,15 @@
     </div>
 
 
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      <input id="status-search" type="text" placeholder="🔍 프로젝트 검색..." oninput="filterStatus()" style="flex:1" />
+    <div style="display:flex;gap:8px;margin-bottom:6px">
+      <input id="status-search" type="text" placeholder="🔍 프로젝트명 / FAB / 호기ID 검색..." oninput="filterStatus()" style="flex:1" />
       <select id="status-sort" onchange="filterStatus()" style="width:auto;min-width:100px">
         <option value="name">이름순</option>
         <option value="progress">진척률순</option>
       </select>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px">
+      💡 프로젝트명, FAB(예: M15X), 호기ID(예: SN-12345) 로 검색 가능해요
     </div>
     <div id="status-list"><div class="loading">불러오는 중...</div></div>
   </div>
@@ -549,13 +552,12 @@ const SUB_STAGES = {
     {id:'6-1', name:'로컬테스트'},
     {id:'6-2', name:'용액 설치'},
     {id:'6-3', name:'설비안정화'},
-   
+    {id:'6-4', name:'STD 측정'},
+    {id:'6-5', name:'샘플 측정'},
   ],
   7: [
-    {id:'7-1', name:'STD 측정'},
-    {id:'7-2', name:'샘플 측정'},
-    {id:'7-3', name:'신뢰성 평가'},
-    {id:'7-4', name:'고객사 요청 평가'},
+    {id:'7-1', name:'신뢰성 평가'},
+    {id:'7-2', name:'고객사 요청 평가'},
   ],
   8: [],
   9: [],
@@ -1282,21 +1284,22 @@ function buildFabRow(label, units, isTotal) {
       const uPct = STAGE_PROGRESS[u.maxStage] || 0;
       const uColor = getProgressColor(uPct);
       const stageName = u.maxStage ? `${u.maxStage}단계 · ${STAGE_NAMES[u.maxStage]}` : '시작 전';
-      return `<span onclick="goToUnitHistory('${unitObj.project_id}','${unitObj.id}')"
-        style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1px solid ${uColor}30;background:${uColor}10;font-size:11px;margin:3px;cursor:pointer;transition:all .15s"
+      // 복사 시 줄바꿈 포함되도록 div로 감싸고, user-select 텍스트는 별도 숨김 span으로
+      return `<div onclick="goToUnitHistory('${unitObj.project_id}','${unitObj.id}')"
+        style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-radius:8px;border:1px solid ${uColor}30;background:${uColor}10;font-size:11px;cursor:pointer;transition:all .15s;width:100%"
         onmouseover="this.style.boxShadow='0 2px 8px ${uColor}40';this.style.borderColor='${uColor}'"
         onmouseout="this.style.boxShadow='';this.style.borderColor='${uColor}30'">
-        <span style="font-weight:700;color:${uColor}">${escHtml(unitObj.name)}</span>
-        ${unitObj.location ? `<span style="color:var(--muted)">${escHtml(unitObj.location)}</span>` : ''}
-        <span style="font-size:10px;font-weight:700;color:${uColor};background:${uColor}20;padding:1px 6px;border-radius:4px">${uPct}%</span>
-        <span style="font-size:10px;color:var(--muted)">${stageName}</span>
-        <span style="font-size:10px;color:${uColor};opacity:.7">→ 히스토리</span>
-      </span>`;
+        <span style="font-weight:700;color:${uColor};min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(unitObj.name)}</span>
+        ${unitObj.location ? `<span style="color:var(--muted);white-space:nowrap">${escHtml(unitObj.location)}</span>` : ''}
+        <span style="font-size:10px;font-weight:700;color:${uColor};background:${uColor}20;padding:1px 6px;border-radius:4px;white-space:nowrap">${uPct}%</span>
+        <span style="font-size:10px;color:var(--muted);white-space:nowrap">${stageName}</span>
+        <span style="font-size:10px;color:${uColor};opacity:.7;margin-left:auto;white-space:nowrap">→ 히스토리</span>
+      </div>`;
     }).join('');
 
     unitRowsHtml = `<tr class="fab-unit-row fab-unit-row-${fabKey}" style="display:${isExpanded?'':'none'};background:#F8FAFC">
-      <td colspan="${totalCols}" style="padding:10px 16px;border:1px solid #E2E8F0;border-top:none">
-        <div style="display:flex;flex-wrap:wrap;gap:2px">${unitCards}</div>
+      <td colspan="${totalCols}" style="padding:8px 16px;border:1px solid #E2E8F0;border-top:none">
+        <div style="display:flex;flex-direction:column;gap:4px">${unitCards}</div>
       </td>
     </tr>`;
   }
@@ -1461,12 +1464,24 @@ async function loadStatus() {
 }
 
 function filterStatus() {
-  const q = (document.getElementById('status-search')?.value || '').toLowerCase();
+  const q = (document.getElementById('status-search')?.value || '').toLowerCase().trim();
   const sort = document.getElementById('status-sort')?.value || 'name';
   const el = document.getElementById('status-list');
   if (!el) return;
 
-  let list = statusData.filter(p => p.name.toLowerCase().includes(q));
+  let list = statusData.filter(p => {
+    if (!q) return true;
+    // 프로젝트명 검색
+    if (p.name.toLowerCase().includes(q)) return true;
+    // 해당 프로젝트의 호기 검색 (FAB, 호기ID)
+    const units = unitsByProject[p.id] || [];
+    return units.some(u =>
+      (u.fab || '').toLowerCase().includes(q) ||
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.location || '').toLowerCase().includes(q)
+    );
+  });
+
   if (sort === 'progress') list = [...list].sort((a,b) => b.pct - a.pct);
   else list = [...list].sort((a,b) => a.name.localeCompare(b.name, 'ko'));
 
@@ -1477,6 +1492,22 @@ function filterStatus() {
     const units = unitsByProject[p.id] || [];
     const color = getProgressColor(p.pct);
     const statusLabel = getProgressLabel(p.pct);
+
+    // 검색어와 매칭된 호기 하이라이트
+    const matchedUnits = q ? units.filter(u =>
+      (u.fab || '').toLowerCase().includes(q) ||
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.location || '').toLowerCase().includes(q)
+    ) : [];
+
+    const matchBadges = matchedUnits.length > 0 ? `
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
+        ${matchedUnits.map(u => `
+          <span style="font-size:10px;background:${color}20;color:${color};padding:1px 7px;border-radius:4px;font-weight:600">
+            ${escHtml(u.name)}${u.fab ? ' · '+escHtml(u.fab) : ''}${u.location ? ' · '+escHtml(u.location) : ''}
+          </span>`).join('')}
+      </div>` : '';
+
     return `
     <div class="pjt-card">
       <div class="pjt-card-header" onclick="togglePjtCard('${p.id}',this.closest('.pjt-card'))">
@@ -1490,6 +1521,7 @@ function filterStatus() {
           <div class="pjt-stage-label">${stageName} · 호기 ${units.length}개
             <span style="margin-left:6px;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:${color}20;color:${color}">${statusLabel}</span>
           </div>
+          ${matchBadges}
         </div>
         <div class="pjt-arrow">▼</div>
       </div>
