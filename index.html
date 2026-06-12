@@ -232,10 +232,21 @@
           <option value="9">9단계 - 종료</option>
         </select>
         <div id="sub-stage-group" style="display:none;margin-top:8px">
-          <label style="font-size:12px;color:var(--muted);margin-bottom:4px">세부 단계 선택 <span style="font-weight:400">(선택사항)</span></label>
-          <select id="log-sub-stage">
-            <option value="">세부 단계 선택</option>
-          </select>
+          <div id="sub-stage-normal">
+            <label style="font-size:12px;color:var(--muted);margin-bottom:4px">세부 단계 선택 <span style="font-weight:400">(선택사항)</span></label>
+            <select id="log-sub-stage">
+              <option value="">세부 단계 선택</option>
+            </select>
+          </div>
+          <div id="sub-stage-multi" style="display:none">
+            <label style="font-size:12px;color:var(--muted);margin-bottom:6px">세부 항목 선택</label>
+            <div id="multi-checkbox-group" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+            <div style="display:flex;gap:8px">
+              <button type="button" class="btn btn-outline btn-sm" onclick="selectAllMulti()">전체 선택</button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="submitMultiComplete()" id="multi-complete-btn" style="display:none">✅ 이걸로 완료</button>
+            </div>
+            <p style="font-size:11px;color:var(--muted);margin-top:6px">※ 필요한 항목만 선택 후 '이걸로 완료'를 눌러야 진척률이 반영됩니다</p>
+          </div>
         </div>
         <div class="progress-preview" id="progress-preview" style="display:none">
           <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
@@ -539,21 +550,13 @@ const SUB_STAGES = {
     {id:'4-1', name:'인터락테스트'},
   ],
   5: [
-    {id:'5-1', name:'EXH 턴온'},
-    {id:'5-2', name:'Bulk 턴온'},
-    {id:'5-3', name:'Drain 턴온'},
-    {id:'5-4', name:'UPW 턴온'},
-    {id:'5-5', name:'FOUP 센터 및 수평확인'},
-    {id:'5-6', name:'OHT 인증'},
-    {id:'5-7', name:'PIO(E84) 인증'},
-    {id:'5-8', name:'로봇 티칭'},
+    {id:'5-1', name:'유틸리티 턴온', type:'multi', items:['EXH','Bulk','UPW','Drain']},
+    {id:'5-2', name:'인증', type:'multi', items:['FOUP 센터/수평','OHT','PIO(E84)']},
   ],
   6: [
     {id:'6-1', name:'로컬테스트'},
-    {id:'6-2', name:'용액 설치'},
-    {id:'6-3', name:'설비안정화'},
-    {id:'6-4', name:'STD 측정'},
-    {id:'6-5', name:'샘플 측정'},
+    {id:'6-2', name:'로봇 티칭'},
+    {id:'6-3', name:'용액 설치 및 안정화'},
   ],
   7: [
     {id:'7-1', name:'신뢰성 평가'},
@@ -849,14 +852,133 @@ function updateProgressPreview() {
 function updateSubStageSelect() {
   const stage = parseInt(document.getElementById('log-stage').value);
   const group = document.getElementById('sub-stage-group');
+  const normalGroup = document.getElementById('sub-stage-normal');
+  const multiGroup = document.getElementById('sub-stage-multi');
   const sel = document.getElementById('log-sub-stage');
+
   if (!stage || !SUB_STAGES[stage] || SUB_STAGES[stage].length === 0) {
     group.style.display = 'none';
     return;
   }
+
   group.style.display = 'block';
-  sel.innerHTML = '<option value="">세부 단계 선택</option>' +
-    SUB_STAGES[stage].map(s => `<option value="${s.id}">${s.id} - ${s.name}</option>`).join('');
+
+  if (stage === 5) {
+    // 5단계: 멀티 체크박스
+    if (normalGroup) normalGroup.style.display = 'none';
+    if (multiGroup) multiGroup.style.display = 'block';
+    renderMultiSubStage(stage);
+  } else {
+    // 그 외: 드롭다운
+    if (normalGroup) normalGroup.style.display = 'block';
+    if (multiGroup) multiGroup.style.display = 'none';
+    sel.innerHTML = '<option value="">세부 단계 선택</option>' +
+      SUB_STAGES[stage].map(s => `<option value="${s.id}">${s.id} - ${s.name}</option>`).join('');
+  }
+}
+
+function renderMultiSubStage(stage) {
+  const subs = SUB_STAGES[stage] || [];
+  const container = document.getElementById('multi-checkbox-group');
+  const completeBtn = document.getElementById('multi-complete-btn');
+  if (!container) return;
+
+  container.innerHTML = subs.map(sub => `
+    <div style="width:100%;margin-bottom:12px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--primary)">${sub.id} - ${sub.name}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${(sub.items||[]).map(item => `
+          <label style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;background:#fff;transition:all .15s"
+            onmouseover="this.style.borderColor='var(--primary)'"
+            onmouseout="if(!this.querySelector('input').checked)this.style.borderColor='var(--border)'">
+            <input type="checkbox" value="${sub.id}::${item}"
+              onchange="onMultiCheckChange(this)"
+              style="width:15px;height:15px;accent-color:var(--primary)">
+            ${item}
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `).join('');
+
+  if (completeBtn) completeBtn.style.display = 'none';
+}
+
+function onMultiCheckChange(checkbox) {
+  const anyChecked = document.querySelectorAll('#multi-checkbox-group input[type="checkbox"]:checked').length > 0;
+  const completeBtn = document.getElementById('multi-complete-btn');
+  if (completeBtn) completeBtn.style.display = anyChecked ? 'inline-flex' : 'none';
+
+  const label = checkbox.closest('label');
+  if (checkbox.checked) {
+    label.style.borderColor = 'var(--primary)';
+    label.style.background = 'var(--primary-light)';
+  } else {
+    label.style.borderColor = 'var(--border)';
+    label.style.background = '#fff';
+  }
+}
+
+function selectAllMulti() {
+  document.querySelectorAll('#multi-checkbox-group input[type="checkbox"]').forEach(cb => {
+    cb.checked = true;
+    const label = cb.closest('label');
+    label.style.borderColor = 'var(--primary)';
+    label.style.background = 'var(--primary-light)';
+  });
+  const completeBtn = document.getElementById('multi-complete-btn');
+  if (completeBtn) completeBtn.style.display = 'inline-flex';
+}
+
+async function submitMultiComplete() {
+  const projectId = document.getElementById('log-project').value;
+  const content = document.getElementById('log-content').value.trim();
+  const date = document.getElementById('log-date').value;
+  const issue = document.getElementById('log-issue')?.value.trim() || '';
+  const issueType = document.getElementById('log-issue-type')?.value || '';
+  const unitId = document.getElementById('log-unit')?.value || null;
+
+  if (!projectId) { showMsg('log-msg','프로젝트를 선택해 주세요',false); return; }
+  if (!content) { showMsg('log-msg','작업 내용을 입력해 주세요',false); return; }
+
+  const checked = [...document.querySelectorAll('#multi-checkbox-group input[type="checkbox"]:checked')];
+  if (!checked.length) { showMsg('log-msg','항목을 선택해 주세요',false); return; }
+
+  // 체크된 각 항목 개별 저장
+  const rows = checked.map(cb => ({
+    project_id: projectId, user_id: currentUser.id,
+    author_name: currentUserName, content, log_date: date,
+    stage: 5, sub_stage: cb.value,
+    issue, issue_type: issueType, unit_id: unitId,
+  }));
+
+  // 완료 확정 행 추가 (진척률 반영용 - 5-1 또는 5-2)
+  const completedSubs = [...new Set(checked.map(cb => cb.value.split('::')[0]))];
+  completedSubs.forEach(subId => {
+    const items = checked.filter(cb => cb.value.startsWith(subId+'::'));
+    rows.push({
+      project_id: projectId, user_id: currentUser.id,
+      author_name: currentUserName,
+      content: `[완료] ${subId} (${items.map(cb=>cb.value.split('::')[1]).join(', ')})`,
+      log_date: date, stage: 5, sub_stage: subId,
+      issue: '', issue_type: '', unit_id: unitId,
+    });
+  });
+
+  const {error} = await sb.from('work_logs').insert(rows);
+  if (error) { showMsg('log-msg','저장 실패: '+error.message,false); return; }
+
+  // 리셋
+  document.getElementById('log-content').value = '';
+  document.getElementById('log-stage').value = '';
+  document.getElementById('progress-preview').style.display = 'none';
+  document.getElementById('sub-stage-group').style.display = 'none';
+  document.getElementById('multi-checkbox-group').innerHTML = '';
+  document.getElementById('multi-complete-btn').style.display = 'none';
+  if (document.getElementById('log-issue')) document.getElementById('log-issue').value = '';
+  if (document.getElementById('log-issue-type')) document.getElementById('log-issue-type').value = '';
+  showMsg('log-msg','저장됐어요! ✓', true);
+  await loadMyRecentLogs();
 }
 
 async function submitLog() {
@@ -974,12 +1096,20 @@ async function openEditLogModal(id, fromProjectId='', fromUnitId='') {
       </select>
       <div id="edit-sub-stage-group" style="margin-top:8px;${(SUB_STAGES[log.stage]||[]).length ? '' : 'display:none'}">
         <label style="font-size:12px;color:var(--muted);margin-bottom:4px">세부 단계 <span style="font-weight:400">(선택사항)</span></label>
-        <select id="edit-log-sub-stage">
-          <option value="">세부 단계 선택</option>
-          ${(SUB_STAGES[log.stage]||[]).map(s=>
-            `<option value="${s.id}" ${log.sub_stage===s.id?'selected':''}>${s.id} - ${s.name}</option>`
-          ).join('')}
-        </select>
+        ${log.stage === 5
+          ? `<select id="edit-log-sub-stage">
+              <option value="">세부 단계 선택</option>
+              <option value="5-1" ${log.sub_stage==='5-1'?'selected':''}>5-1 - 유틸리티 턴온</option>
+              <option value="5-2" ${log.sub_stage==='5-2'?'selected':''}>5-2 - 인증</option>
+             </select>
+             <p style="font-size:11px;color:var(--muted);margin-top:4px">※ 세부항목 체크박스는 새 작업 입력에서만 지원돼요</p>`
+          : `<select id="edit-log-sub-stage">
+              <option value="">세부 단계 선택</option>
+              ${(SUB_STAGES[log.stage]||[]).map(s=>
+                `<option value="${s.id}" ${log.sub_stage===s.id?'selected':''}>${s.id} - ${s.name}</option>`
+              ).join('')}
+            </select>`
+        }
       </div>
     </div>
     <div class="form-group">
@@ -1156,9 +1286,10 @@ async function loadFabSummary() {
   //         sub_stage 기록이 하나라도 있는 단계 → 기록된 것만 완료로 계산
   function buildEffectiveSubStages(unitId) {
     const recorded = subStagesByUnit[unitId] || new Set();
-    const effective = new Set(recorded);
+    const effective = new Set();
 
-    // 작업 기록이 있는 모든 단계를 순회
+    // 5단계: '5-1', '5-2' (완료 확정 행)만 완료로 인정
+    // 그 외 단계: 기존 절충안 유지
     const stagesWithLog = new Set(
       (logs||[]).filter(l => l.unit_id === unitId && l.stage > 0).map(l => l.stage)
     );
@@ -1166,12 +1297,21 @@ async function loadFabSummary() {
     stagesWithLog.forEach(s => {
       const subs = SUB_STAGES[s] || [];
       if (!subs.length) return;
-      // 해당 단계에 sub_stage 기록이 하나도 없으면 → 전부 완료로 간주
-      const hasAnySubRecord = [...recorded].some(id => id.startsWith(s + '-'));
-      if (!hasAnySubRecord) {
-        subs.forEach(sub => effective.add(sub.id));
+
+      if (s === 5) {
+        // 5단계: '5-1', '5-2' 완료 확정 행이 recorded에 있을 때만 완료
+        subs.forEach(sub => {
+          if (recorded.has(sub.id)) effective.add(sub.id);
+        });
+      } else {
+        // 그 외: sub_stage 기록 없으면 전부 완료, 있으면 기록된 것만
+        const hasAnySubRecord = [...recorded].some(id => id.startsWith(s + '-') && !id.includes('::'));
+        if (!hasAnySubRecord) {
+          subs.forEach(sub => effective.add(sub.id));
+        } else {
+          subs.forEach(sub => { if (recorded.has(sub.id)) effective.add(sub.id); });
+        }
       }
-      // sub_stage 기록이 있으면 → 기록된 것만 유지 (이미 effective에 들어있음)
     });
 
     return effective;
