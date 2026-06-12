@@ -232,15 +232,13 @@
           <option value="9">9단계 - 종료</option>
         </select>
         <div id="sub-stage-group" style="display:none;margin-top:8px">
-          <div id="sub-stage-normal">
-            <label style="font-size:12px;color:var(--muted);margin-bottom:4px">세부 단계 선택 <span style="font-weight:400">(선택사항)</span></label>
-            <select id="log-sub-stage">
-              <option value="">세부 단계 선택</option>
-            </select>
-          </div>
-          <div id="sub-stage-multi" style="display:none">
+          <label style="font-size:12px;color:var(--muted);margin-bottom:4px">세부 단계 선택 <span style="font-weight:400">(선택사항)</span></label>
+          <select id="log-sub-stage" onchange="updateSubItemCheckboxes()">
+            <option value="">세부 단계 선택</option>
+          </select>
+          <div id="sub-item-group" style="display:none;margin-top:10px">
             <label style="font-size:12px;color:var(--muted);margin-bottom:6px">세부 항목 선택</label>
-            <div id="multi-checkbox-group" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
+            <div id="multi-checkbox-group" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
             <div style="display:flex;gap:8px">
               <button type="button" class="btn btn-outline btn-sm" onclick="selectAllMulti()">전체 선택</button>
               <button type="button" class="btn btn-primary btn-sm" onclick="submitMultiComplete()" id="multi-complete-btn" style="display:none">✅ 이걸로 완료</button>
@@ -852,9 +850,8 @@ function updateProgressPreview() {
 function updateSubStageSelect() {
   const stage = parseInt(document.getElementById('log-stage').value);
   const group = document.getElementById('sub-stage-group');
-  const normalGroup = document.getElementById('sub-stage-normal');
-  const multiGroup = document.getElementById('sub-stage-multi');
   const sel = document.getElementById('log-sub-stage');
+  const itemGroup = document.getElementById('sub-item-group');
 
   if (!stage || !SUB_STAGES[stage] || SUB_STAGES[stage].length === 0) {
     group.style.display = 'none';
@@ -862,46 +859,50 @@ function updateSubStageSelect() {
   }
 
   group.style.display = 'block';
+  if (itemGroup) itemGroup.style.display = 'none';
 
-  if (stage === 5) {
-    // 5단계: 멀티 체크박스
-    if (normalGroup) normalGroup.style.display = 'none';
-    if (multiGroup) multiGroup.style.display = 'block';
-    renderMultiSubStage(stage);
-  } else {
-    // 그 외: 드롭다운
-    if (normalGroup) normalGroup.style.display = 'block';
-    if (multiGroup) multiGroup.style.display = 'none';
-    sel.innerHTML = '<option value="">세부 단계 선택</option>' +
-      SUB_STAGES[stage].map(s => `<option value="${s.id}">${s.id} - ${s.name}</option>`).join('');
-  }
+  // 모든 단계 동일하게 드롭다운으로 표시
+  sel.innerHTML = '<option value="">세부 단계 선택</option>' +
+    SUB_STAGES[stage].map(s => `<option value="${s.id}">${s.id} - ${s.name}</option>`).join('');
+
+  // 체크박스 초기화
+  const container = document.getElementById('multi-checkbox-group');
+  if (container) container.innerHTML = '';
+  const completeBtn = document.getElementById('multi-complete-btn');
+  if (completeBtn) completeBtn.style.display = 'none';
 }
 
-function renderMultiSubStage(stage) {
-  const subs = SUB_STAGES[stage] || [];
+function updateSubItemCheckboxes() {
+  const stage = parseInt(document.getElementById('log-stage').value);
+  const subStageId = document.getElementById('log-sub-stage').value;
+  const itemGroup = document.getElementById('sub-item-group');
   const container = document.getElementById('multi-checkbox-group');
   const completeBtn = document.getElementById('multi-complete-btn');
-  if (!container) return;
 
-  container.innerHTML = subs.map(sub => `
-    <div style="width:100%;margin-bottom:12px">
-      <div style="font-size:13px;font-weight:700;margin-bottom:6px;color:var(--primary)">${sub.id} - ${sub.name}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${(sub.items||[]).map(item => `
-          <label style="display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;background:#fff;transition:all .15s"
-            onmouseover="this.style.borderColor='var(--primary)'"
-            onmouseout="if(!this.querySelector('input').checked)this.style.borderColor='var(--border)'">
-            <input type="checkbox" value="${sub.id}::${item}"
-              onchange="onMultiCheckChange(this)"
-              style="width:15px;height:15px;accent-color:var(--primary)">
-            ${item}
-          </label>
-        `).join('')}
-      </div>
-    </div>
-  `).join('');
+  if (!subStageId || !itemGroup) return;
 
-  if (completeBtn) completeBtn.style.display = 'none';
+  const sub = (SUB_STAGES[stage]||[]).find(s => s.id === subStageId);
+
+  // 체크박스가 있는 세부단계 (type: 'multi')
+  if (sub && sub.items && sub.items.length > 0) {
+    itemGroup.style.display = 'block';
+    container.innerHTML = sub.items.map(item => `
+      <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;background:#fff;transition:all .15s"
+        onmouseover="this.style.borderColor='var(--primary)'"
+        onmouseout="if(!this.querySelector('input').checked)this.style.borderColor='var(--border)'">
+        <input type="checkbox" value="${subStageId}::${item}"
+          onchange="onMultiCheckChange(this)"
+          style="width:15px;height:15px;accent-color:var(--primary)">
+        ${item}
+      </label>
+    `).join('');
+    if (completeBtn) completeBtn.style.display = 'none';
+  } else {
+    // 체크박스 없는 일반 세부단계
+    itemGroup.style.display = 'none';
+    container.innerHTML = '';
+    if (completeBtn) completeBtn.style.display = 'none';
+  }
 }
 
 function onMultiCheckChange(checkbox) {
@@ -942,6 +943,7 @@ async function submitMultiComplete() {
   if (!content) { showMsg('log-msg','작업 내용을 입력해 주세요',false); return; }
 
   const checked = [...document.querySelectorAll('#multi-checkbox-group input[type="checkbox"]:checked')];
+  const subStageId = document.getElementById('log-sub-stage')?.value;
   if (!checked.length) { showMsg('log-msg','항목을 선택해 주세요',false); return; }
 
   // 체크된 각 항목 개별 저장
@@ -953,16 +955,13 @@ async function submitMultiComplete() {
   }));
 
   // 완료 확정 행 추가 (진척률 반영용 - 5-1 또는 5-2)
-  const completedSubs = [...new Set(checked.map(cb => cb.value.split('::')[0]))];
-  completedSubs.forEach(subId => {
-    const items = checked.filter(cb => cb.value.startsWith(subId+'::'));
-    rows.push({
-      project_id: projectId, user_id: currentUser.id,
-      author_name: currentUserName,
-      content: `[완료] ${subId} (${items.map(cb=>cb.value.split('::')[1]).join(', ')})`,
-      log_date: date, stage: 5, sub_stage: subId,
-      issue: '', issue_type: '', unit_id: unitId,
-    });
+  const selectedItems = checked.map(cb => cb.value.split('::')[1]).join(', ');
+  rows.push({
+    project_id: projectId, user_id: currentUser.id,
+    author_name: currentUserName,
+    content: `[완료] ${subStageId} (${selectedItems})`,
+    log_date: date, stage: 5, sub_stage: subStageId,
+    issue: '', issue_type: '', unit_id: unitId,
   });
 
   const {error} = await sb.from('work_logs').insert(rows);
@@ -973,8 +972,10 @@ async function submitMultiComplete() {
   document.getElementById('log-stage').value = '';
   document.getElementById('progress-preview').style.display = 'none';
   document.getElementById('sub-stage-group').style.display = 'none';
+  document.getElementById('sub-item-group').style.display = 'none';
   document.getElementById('multi-checkbox-group').innerHTML = '';
   document.getElementById('multi-complete-btn').style.display = 'none';
+  document.getElementById('log-sub-stage').value = '';
   if (document.getElementById('log-issue')) document.getElementById('log-issue').value = '';
   if (document.getElementById('log-issue-type')) document.getElementById('log-issue-type').value = '';
   showMsg('log-msg','저장됐어요! ✓', true);
@@ -1095,44 +1096,20 @@ async function openEditLogModal(id, fromProjectId='', fromUnitId='') {
         ).join('')}
       </select>
       <div id="edit-sub-stage-group" style="margin-top:8px;${(SUB_STAGES[log.stage]||[]).length ? '' : 'display:none'}">
-        <label style="font-size:12px;color:var(--muted);margin-bottom:6px">세부 단계 <span style="font-weight:400">(선택사항)</span></label>
-        ${log.stage === 5
-          ? (() => {
-              // 기존 sub_stage 파싱 (5-1::EXH 형태)
-              const currentSub = log.sub_stage || '';
-              const currentSubBase = currentSub.split('::')[0]; // '5-1' or '5-2'
-              const currentItem = currentSub.includes('::') ? currentSub.split('::')[1] : '';
-              return SUB_STAGES[5].map(sub => `
-                <div style="margin-bottom:10px">
-                  <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:5px">${sub.id} - ${sub.name}</div>
-                  <div style="display:flex;flex-wrap:wrap;gap:6px">
-                    ${(sub.items||[]).map(item => {
-                      const val = sub.id+'::'+item;
-                      const checked = (currentSub===val || (currentSubBase===sub.id && currentItem===item)) ? 'checked' : '';
-                      return `<label style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1.5px solid ${checked?'var(--primary)':'var(--border)'};border-radius:8px;cursor:pointer;font-size:12px;background:${checked?'var(--primary-light)':'#fff'}"
-                        onmouseover="this.style.borderColor='var(--primary)'"
-                        onmouseout="if(!this.querySelector('input').checked)this.style.cssText='border-color:var(--border);background:#fff;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:12px'">
-                        <input type="checkbox" name="edit-sub-item" value="${val}" ${checked}
-                          style="width:14px;height:14px;accent-color:var(--primary)"
-                          onchange="onEditMultiCheckChange(this)">
-                        ${item}
-                      </label>`;
-                    }).join('')}
-                  </div>
-                </div>`).join('') +
-              `<div style="margin-top:8px;display:flex;gap:8px;align-items:center">
-                <button type="button" onclick="selectAllEditMulti()" style="padding:5px 10px;border-radius:7px;border:1.5px solid var(--primary);background:#fff;color:var(--primary);font-size:12px;font-weight:600;cursor:pointer">전체 선택</button>
-                <span id="edit-multi-complete-indicator" style="font-size:11px;color:var(--success)"></span>
-              </div>
-              <input type="hidden" id="edit-log-sub-stage" value="${currentSub}">`;
-            })()
-          : `<select id="edit-log-sub-stage">
-              <option value="">세부 단계 선택</option>
-              ${(SUB_STAGES[log.stage]||[]).map(s=>
-                `<option value="${s.id}" ${log.sub_stage===s.id?'selected':''}>${s.id} - ${s.name}</option>`
-              ).join('')}
-            </select>`
-        }
+        <label style="font-size:12px;color:var(--muted);margin-bottom:4px">세부 단계 <span style="font-weight:400">(선택사항)</span></label>
+        <select id="edit-log-sub-stage" onchange="updateEditSubItemCheckboxes()">
+          <option value="">세부 단계 선택</option>
+          ${(SUB_STAGES[log.stage]||[]).map(s => {
+            // 기존 기록과 매칭 (5-1::EXH → 5-1, 5-1 → 5-1)
+            const base = (log.sub_stage||'').split('::')[0];
+            return `<option value="${s.id}" ${base===s.id?'selected':''}>${s.id} - ${s.name}</option>`;
+          }).join('')}
+        </select>
+        <div id="edit-sub-item-group" style="display:none;margin-top:10px">
+          <label style="font-size:12px;color:var(--muted);margin-bottom:6px">세부 항목 선택</label>
+          <div id="edit-multi-checkbox-group" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+          <button type="button" onclick="selectAllEditMulti()" style="padding:5px 10px;border-radius:7px;border:1.5px solid var(--primary);background:#fff;color:var(--primary);font-size:12px;font-weight:600;cursor:pointer">전체 선택</button>
+        </div>
       </div>
     </div>
     <div class="form-group">
@@ -1171,48 +1148,53 @@ function updateEditSubStageSelect(stageVal, currentSubStage) {
   }
   group.style.display = 'block';
 
-  if (stage === 5) {
-    // 5단계: 체크박스 렌더링
-    const label = group.querySelector('label');
-    // label 다음 내용 교체
-    const existingContent = group.querySelector('#edit-5stage-content');
-    const container = existingContent || document.createElement('div');
-    container.id = 'edit-5stage-content';
-    container.innerHTML = subs.map(sub => `
-      <div style="margin-bottom:10px">
-        <div style="font-size:12px;font-weight:700;color:var(--primary);margin-bottom:5px">${sub.id} - ${sub.name}</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
-          ${(sub.items||[]).map(item => {
-            const val = sub.id+'::'+item;
-            const checked = currentSubStage === val ? 'checked' : '';
-            return `<label style="display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border:1.5px solid ${checked?'var(--primary)':'var(--border)'};border-radius:8px;cursor:pointer;font-size:12px;background:${checked?'var(--primary-light)':'#fff'}">
-              <input type="checkbox" name="edit-sub-item" value="${val}" ${checked}
-                style="width:14px;height:14px;accent-color:var(--primary)"
-                onchange="onEditMultiCheckChange(this)">
-              ${item}
-            </label>`;
-          }).join('')}
-        </div>
-      </div>`).join('') +
-    `<div style="margin-top:6px;display:flex;gap:8px">
-      <button type="button" onclick="selectAllEditMulti()" style="padding:5px 10px;border-radius:7px;border:1.5px solid var(--primary);background:#fff;color:var(--primary);font-size:12px;font-weight:600;cursor:pointer">전체 선택</button>
-    </div>
-    <input type="hidden" id="edit-log-sub-stage" value="${currentSubStage||''}">`;
-    if (!existingContent) group.appendChild(container);
-  } else {
-    // 그 외: 드롭다운
-    const existing = group.querySelector('#edit-5stage-content');
-    if (existing) existing.remove();
-    let sel = group.querySelector('#edit-log-sub-stage');
-    if (!sel || sel.type === 'hidden') {
-      sel = document.createElement('select');
-      sel.id = 'edit-log-sub-stage';
-      group.appendChild(sel);
-    }
+  // 드롭다운 업데이트
+  let sel = document.getElementById('edit-log-sub-stage');
+  if (sel) {
+    const base = (currentSubStage||'').split('::')[0];
     sel.innerHTML = '<option value="">세부 단계 선택</option>' +
-      subs.map(s =>
-        `<option value="${s.id}" ${currentSubStage===s.id?'selected':''}>${s.id} - ${s.name}</option>`
-      ).join('');
+      subs.map(s => `<option value="${s.id}" ${base===s.id?'selected':''}>${s.id} - ${s.name}</option>`).join('');
+    sel.onchange = updateEditSubItemCheckboxes;
+  }
+
+  // 체크박스 영역 초기화
+  const itemGroup = document.getElementById('edit-sub-item-group');
+  if (itemGroup) itemGroup.style.display = 'none';
+
+  // 기존 선택값이 있으면 체크박스 자동 표시
+  if (currentSubStage) {
+    setTimeout(() => updateEditSubItemCheckboxes(currentSubStage), 50);
+  }
+}
+
+function updateEditSubItemCheckboxes(currentSubStage) {
+  const stage = parseInt(document.getElementById('edit-log-stage')?.value) || 0;
+  const sel = document.getElementById('edit-log-sub-stage');
+  const subStageId = sel?.value;
+  const itemGroup = document.getElementById('edit-sub-item-group');
+  const container = document.getElementById('edit-multi-checkbox-group');
+  if (!itemGroup || !container) return;
+
+  const sub = (SUB_STAGES[stage]||[]).find(s => s.id === subStageId);
+
+  if (sub && sub.items && sub.items.length > 0) {
+    itemGroup.style.display = 'block';
+    const existingItem = typeof currentSubStage === 'string' ? currentSubStage : '';
+    container.innerHTML = sub.items.map(item => {
+      const val = subStageId + '::' + item;
+      const isChecked = existingItem === val || existingItem.split('::')[1] === item;
+      return `<label style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid ${isChecked?'var(--primary)':'var(--border)'};border-radius:8px;cursor:pointer;font-size:12px;background:${isChecked?'var(--primary-light)':'#fff'};transition:all .15s"
+        onmouseover="this.style.borderColor='var(--primary)'"
+        onmouseout="if(!this.querySelector('input').checked){this.style.borderColor='var(--border)';this.style.background='#fff';}">
+        <input type="checkbox" name="edit-sub-item" value="${val}" ${isChecked?'checked':''}
+          style="width:14px;height:14px;accent-color:var(--primary)"
+          onchange="onEditMultiCheckChange(this)">
+        ${item}
+      </label>`;
+    }).join('');
+  } else {
+    itemGroup.style.display = 'none';
+    container.innerHTML = '';
   }
 }
 
@@ -1225,10 +1207,6 @@ function onEditMultiCheckChange(checkbox) {
     label.style.borderColor = 'var(--border)';
     label.style.background = '#fff';
   }
-  // hidden input 업데이트 (마지막 체크된 값으로)
-  const checked = [...document.querySelectorAll('input[name="edit-sub-item"]:checked')];
-  const hidden = document.getElementById('edit-log-sub-stage');
-  if (hidden) hidden.value = checked.length ? checked[checked.length-1].value : '';
 }
 
 function selectAllEditMulti() {
@@ -1238,9 +1216,6 @@ function selectAllEditMulti() {
     label.style.borderColor = 'var(--primary)';
     label.style.background = 'var(--primary-light)';
   });
-  const checked = [...document.querySelectorAll('input[name="edit-sub-item"]:checked')];
-  const hidden = document.getElementById('edit-log-sub-stage');
-  if (hidden && checked.length) hidden.value = checked[checked.length-1].value;
 }
 
 async function saveEditLog(id, fromProjectId='', fromUnitId='') {
@@ -1258,49 +1233,32 @@ async function saveEditLog(id, fromProjectId='', fromUnitId='') {
     return;
   }
 
-  // 5단계일 때 체크된 모든 항목 처리
+  // 5단계 체크박스 처리
   let saveError = null;
   if (stage === 5) {
+    const subStageId = document.getElementById('edit-log-sub-stage')?.value || subStage;
     const checkedItems = [...document.querySelectorAll('input[name="edit-sub-item"]:checked')];
-    if (checkedItems.length > 1) {
-      // 여러 항목 체크 시 - 현재 행 업데이트 + 추가 행 insert
-      const {error: e1} = await sb.from('work_logs').update({
-        log_date: date, unit_id: unitId, stage, sub_stage: checkedItems[0].value,
-        content, issue_type: issueType, issue,
-      }).eq('id', id);
-      saveError = e1;
-      if (!saveError && checkedItems.length > 1) {
-        const extraRows = checkedItems.slice(1).map(cb => ({
-          project_id: (async () => {
-            const {data} = await sb.from('work_logs').select('project_id').eq('id',id).single();
-            return data?.project_id;
-          })(),
-          user_id: currentUser.id, author_name: currentUserName,
-          content, log_date: date, stage: 5, sub_stage: cb.value,
-          issue, issue_type: issueType, unit_id: unitId,
-        }));
-      }
-      // 완료 확정 행 업데이트
-      const completedSubs = [...new Set(checkedItems.map(cb => cb.value.split('::')[0]))];
+
+    // 현재 행 업데이트 (첫 번째 체크 항목 또는 sub_stage)
+    const firstVal = checkedItems.length > 0 ? checkedItems[0].value : subStageId;
+    const {error: e1} = await sb.from('work_logs').update({
+      log_date: date, unit_id: unitId, stage, sub_stage: firstVal,
+      content, issue_type: issueType, issue,
+    }).eq('id', id);
+    saveError = e1;
+
+    // 추가 체크 항목들 insert
+    if (!saveError && checkedItems.length > 1) {
       const {data: origLog} = await sb.from('work_logs').select('project_id').eq('id',id).single();
       if (origLog) {
-        for (const subId of completedSubs) {
-          const items = checkedItems.filter(cb=>cb.value.startsWith(subId+'::'));
-          await sb.from('work_logs').insert({
-            project_id: origLog.project_id, user_id: currentUser.id,
-            author_name: currentUserName,
-            content: `[완료] ${subId} (${items.map(cb=>cb.value.split('::')[1]).join(', ')})`,
-            log_date: date, stage: 5, sub_stage: subId,
-            issue: '', issue_type: '', unit_id: unitId,
-          });
-        }
+        const extraRows = checkedItems.slice(1).map(cb => ({
+          project_id: origLog.project_id, user_id: currentUser.id,
+          author_name: currentUserName, content,
+          log_date: date, stage: 5, sub_stage: cb.value,
+          issue, issue_type: issueType, unit_id: unitId,
+        }));
+        await sb.from('work_logs').insert(extraRows);
       }
-    } else {
-      const {error: e1} = await sb.from('work_logs').update({
-        log_date: date, unit_id: unitId, stage, sub_stage: subStage,
-        content, issue_type: issueType, issue,
-      }).eq('id', id);
-      saveError = e1;
     }
   } else {
     const {error: e1} = await sb.from('work_logs').update({
