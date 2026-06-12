@@ -301,7 +301,11 @@
 
     <!-- FAB 현황 요약판 -->
     <div style="margin-bottom:20px">
-      <div style="font-size:15px;font-weight:700;margin-bottom:10px">📊 FAB별 설비 현황</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-size:15px;font-weight:700">📊 FAB별 설비 현황</div>
+        <div style="font-size:11px;color:var(--muted)">FAB명 클릭 → 호기 목록 · 👁 클릭 → 숨기기</div>
+      </div>
+      <div id="fab-hide-panel" style="display:none;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:10px;padding:8px 12px;background:#F8FAFC;border-radius:10px;border:1px solid var(--border)"></div>
       <div style="overflow-x:auto">
         <table id="fab-summary-table" style="width:100%;border-collapse:collapse;font-size:12px;min-width:700px">
           <thead>
@@ -326,6 +330,7 @@
         </table>
       </div>
     </div>
+
 
     <div style="display:flex;gap:8px;margin-bottom:14px">
       <input id="status-search" type="text" placeholder="🔍 프로젝트 검색..." oninput="filterStatus()" style="flex:1" />
@@ -557,6 +562,10 @@ const SUB_STAGES = {
 
 // 세부단계 펼침 상태
 const expandedStages = new Set();
+// FAB 행 호기 펼침 상태
+const expandedFabs = new Set();
+// FAB 행 숨김 상태
+const hiddenFabs = new Set();
 
 // 진척률 기준 색상
 function getProgressColor(pct) {
@@ -1224,8 +1233,58 @@ function buildFabRow(label, units, isTotal) {
   const bg = isTotal ? '#F0FDF4' : 'white';
   const fontWeight = isTotal ? '700' : '400';
 
-  return `<tr style="background:${bg}">
-    <td style="padding:8px 12px;font-weight:${fontWeight};border:1px solid #E2E8F0;white-space:nowrap">${label}</td>
+  const fabKey = label.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+  const isHidden = hiddenFabs.has(label);
+  const isExpanded = expandedFabs.has(label);
+
+  // 호기 목록 행 생성 (접힌 상태로 시작)
+  let unitRowsHtml = '';
+  if (!isTotal && units.length > 0) {
+    // 컬럼 수 계산 (FAB + 진행률 + 설비수량 + 단계9개 + 세부단계)
+    const totalSubCols = Object.values(SUB_STAGES).reduce((sum, s) => sum + s.length, 0);
+    const totalCols = 3 + 9 + totalSubCols;
+
+    const unitCards = units.map(u => {
+      const unitObj = allUnits.find(au => au.id === u.id);
+      if (!unitObj) return '';
+      const uPct = STAGE_PROGRESS[u.maxStage] || 0;
+      const uColor = getProgressColor(uPct);
+      const stageName = u.maxStage ? `${u.maxStage}단계 · ${STAGE_NAMES[u.maxStage]}` : '시작 전';
+      return `<span onclick="goToUnitHistory('${unitObj.project_id}','${unitObj.id}')"
+        style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;border:1px solid ${uColor}30;background:${uColor}10;font-size:11px;margin:3px;cursor:pointer;transition:all .15s"
+        onmouseover="this.style.boxShadow='0 2px 8px ${uColor}40';this.style.borderColor='${uColor}'"
+        onmouseout="this.style.boxShadow='';this.style.borderColor='${uColor}30'">
+        <span style="font-weight:700;color:${uColor}">${escHtml(unitObj.name)}</span>
+        ${unitObj.location ? `<span style="color:var(--muted)">${escHtml(unitObj.location)}</span>` : ''}
+        <span style="font-size:10px;font-weight:700;color:${uColor};background:${uColor}20;padding:1px 6px;border-radius:4px">${uPct}%</span>
+        <span style="font-size:10px;color:var(--muted)">${stageName}</span>
+        <span style="font-size:10px;color:${uColor};opacity:.7">→ 히스토리</span>
+      </span>`;
+    }).join('');
+
+    unitRowsHtml = `<tr class="fab-unit-row fab-unit-row-${fabKey}" style="display:${isExpanded?'':'none'};background:#F8FAFC">
+      <td colspan="${totalCols}" style="padding:10px 16px;border:1px solid #E2E8F0;border-top:none">
+        <div style="display:flex;flex-wrap:wrap;gap:2px">${unitCards}</div>
+      </td>
+    </tr>`;
+  }
+
+  const fabRowStyle = isHidden ? 'display:none' : `background:${bg}`;
+  const fabNameCell = isTotal
+    ? `<td style="padding:8px 12px;font-weight:${fontWeight};border:1px solid #E2E8F0;white-space:nowrap">${label}</td>`
+    : `<td style="padding:8px 12px;font-weight:${fontWeight};border:1px solid #E2E8F0;white-space:nowrap">
+        <div style="display:flex;align-items:center;gap:6px">
+          <button onclick="toggleFabHide('${label}')" title="숨기기/보이기"
+            style="background:none;border:none;cursor:pointer;font-size:13px;opacity:.5;padding:0;line-height:1" id="fab-eye-${fabKey}">👁</button>
+          <span onclick="toggleFabUnits('${label}')" style="cursor:pointer;display:flex;align-items:center;gap:4px">
+            ${label}
+            <span id="fab-arrow-${fabKey}" style="font-size:10px;color:var(--muted)">${isExpanded?'▲':'▼'}</span>
+          </span>
+        </div>
+      </td>`;
+
+  return `<tr class="fab-main-row fab-main-row-${fabKey}" style="${fabRowStyle}" id="fab-row-${fabKey}">
+    ${fabNameCell}
     <td data-progress="${avgPct}" style="padding:8px 10px;text-align:center;border:1px solid #E2E8F0">
       <div style="font-size:12px;font-weight:700;color:${color}">${avgPct}%</div>
       <div style="background:#E2E8F0;border-radius:99px;height:4px;margin-top:3px">
@@ -1234,7 +1293,57 @@ function buildFabRow(label, units, isTotal) {
     </td>
     <td style="padding:8px 10px;text-align:center;font-weight:700;border:1px solid #E2E8F0">${total}</td>
     ${stageCells}
-  </tr>`;
+  </tr>${unitRowsHtml}`;
+}
+
+function toggleFabUnits(fab) {
+  const fabKey = fab.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+  const isExpanded = expandedFabs.has(fab);
+  if (isExpanded) expandedFabs.delete(fab);
+  else expandedFabs.add(fab);
+
+  const unitRows = document.querySelectorAll(`.fab-unit-row-${fabKey}`);
+  unitRows.forEach(r => { r.style.display = expandedFabs.has(fab) ? '' : 'none'; });
+
+  const arrow = document.getElementById(`fab-arrow-${fabKey}`);
+  if (arrow) arrow.textContent = expandedFabs.has(fab) ? '▲' : '▼';
+}
+
+function toggleFabHide(fab) {
+  const fabKey = fab.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+  if (hiddenFabs.has(fab)) {
+    // 숨김 해제: 메인 행만 보이게, 호기 행은 접힌 상태로
+    hiddenFabs.delete(fab);
+    expandedFabs.delete(fab);
+    document.querySelectorAll(`.fab-main-row-${fabKey}`)
+      .forEach(r => { r.style.display = ''; });
+    document.querySelectorAll(`.fab-unit-row-${fabKey}`)
+      .forEach(r => { r.style.display = 'none'; });
+    const arrow = document.getElementById(`fab-arrow-${fabKey}`);
+    if (arrow) arrow.textContent = '▼';
+  } else {
+    // 숨김: 메인 행 + 호기 행 모두 숨기기
+    hiddenFabs.add(fab);
+    expandedFabs.delete(fab);
+    document.querySelectorAll(`.fab-main-row-${fabKey}, .fab-unit-row-${fabKey}`)
+      .forEach(r => { r.style.display = 'none'; });
+  }
+
+  // 숨김 버튼 패널 업데이트
+  renderFabHidePanel();
+}
+
+function renderFabHidePanel() {
+  const panel = document.getElementById('fab-hide-panel');
+  if (!panel) return;
+  if (hiddenFabs.size === 0) { panel.style.display = 'none'; return; }
+  panel.style.display = 'flex';
+  panel.innerHTML = '<span style="font-size:12px;color:var(--muted);margin-right:6px">숨긴 FAB:</span>' +
+    [...hiddenFabs].map(fab => `
+      <span style="display:inline-flex;align-items:center;gap:4px;background:#F1F5F9;border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:12px;font-weight:600">
+        ${escHtml(fab)}
+        <button onclick="toggleFabHide('${fab}')" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;line-height:1;padding:0">✕</button>
+      </span>`).join('');
 }
 
 // FAB 표 로드 후 세부단계 헤더 동적 삽입 (단계 헤더 바로 뒤에 정확히 삽입)
@@ -2135,6 +2244,44 @@ async function loadDailyReport() {
           </div>`).join('')}
       </div>`;
     }).join('')}`;
+}
+
+async function goToUnitHistory(projectId, unitId) {
+  if (!projectId) return;
+
+  // 탭 전환
+  ['input','status','calendar','daily','issues','projects'].forEach(t => {
+    document.getElementById('tab-'+t).classList.toggle('hidden', t!=='status');
+  });
+  document.querySelectorAll('.tab-nav button').forEach((b,i) => {
+    b.classList.toggle('active', ['input','status','calendar','daily','issues','projects'][i]==='status');
+  });
+
+  await loadStatus();
+  await loadFabSummary();
+
+  // 프로젝트 카드 찾아서 펼치기
+  const panel = document.getElementById('hist-'+projectId);
+  const card = panel?.closest('.pjt-card');
+  if (!card) return;
+
+  card.scrollIntoView({ behavior:'smooth', block:'start' });
+
+  // 아직 안 펼쳐져 있으면 펼치기
+  if (!panel.classList.contains('open')) {
+    await togglePjtCard(projectId, card);
+  }
+
+  // 해당 호기 탭 버튼 찾아서 클릭
+  if (unitId) {
+    await new Promise(r => setTimeout(r, 300)); // 렌더링 대기
+    const unitBtn = panel.querySelector(`.unit-tab[onclick*="${unitId}"]`);
+    if (unitBtn) {
+      unitBtn.click();
+      // 호기 탭으로 스크롤
+      unitBtn.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    }
+  }
 }
 
 async function goToProjectHistory(projectId) {
