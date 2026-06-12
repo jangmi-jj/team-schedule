@@ -224,8 +224,8 @@
           <option value="1">1단계 - 납품/정위치</option>
           <option value="2">2단계 - 다이크/지진브라켓</option>
           <option value="3">3단계 - 전기 턴온</option>
-          <option value="4">4단계 - 인터락테스트/인증</option>
-          <option value="5">5단계 - 유틸리티 턴온</option>
+          <option value="4">4단계 - 인터락테스트</option>
+          <option value="5">5단계 - 유틸리티 턴온/인증</option>
           <option value="6">6단계 - 설비안정화 및 구동</option>
           <option value="7">7단계 - 셋업평가</option>
           <option value="8">8단계 - 셋업보고서</option>
@@ -316,8 +316,8 @@
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(1)" data-stage="1" title="클릭하여 세부단계 펼치기/접기">1단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">납품/정위치</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(2)" data-stage="2" title="클릭하여 세부단계 펼치기/접기">2단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">다이크/지진브라켓</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(3)" data-stage="3" title="클릭하여 세부단계 펼치기/접기">3단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">전기 턴온</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(4)" data-stage="4" title="클릭하여 세부단계 펼치기/접기">4단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">인터락테스트/인증</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(5)" data-stage="5" title="클릭하여 세부단계 펼치기/접기">5단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">유틸리티 턴온</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(4)" data-stage="4" title="클릭하여 세부단계 펼치기/접기">4단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">인터락테스트</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(5)" data-stage="5" title="클릭하여 세부단계 펼치기/접기">5단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">유틸리티 턴온/인증</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(6)" data-stage="6" title="클릭하여 세부단계 펼치기/접기">6단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">설비안정화 및 구동</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(7)" data-stage="7" title="클릭하여 세부단계 펼치기/접기">7단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">셋업평가</div></th>
               <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px" data-stage="8">8단계<div style="font-size:9px;font-weight:400;opacity:.8">셋업보고서</div></th>
@@ -512,7 +512,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // 단계별 진척률
 const STAGE_PROGRESS = [0, 0, 10, 25, 35, 45, 55, 70, 90, 100];
-const STAGE_NAMES = ['','납품/정위치','다이크/지진브라켓','전기 턴온','인터락테스트/인증','유틸리티 턴온','설비안정화 및 구동','셋업평가','셋업보고서','종료'];
+const STAGE_NAMES = ['','납품/정위치','다이크/지진브라켓','전기 턴온','인터락테스트','유틸리티 턴온/인증','설비안정화 및 구동','셋업평가','셋업보고서','종료'];
 
 // 세부 단계 정의
 const SUB_STAGES = {
@@ -549,12 +549,13 @@ const SUB_STAGES = {
     {id:'6-1', name:'로컬테스트'},
     {id:'6-2', name:'용액 설치'},
     {id:'6-3', name:'설비안정화'},
-    {id:'6-4', name:'STD 측정'},
-    {id:'6-5', name:'샘플 측정'},
+   
   ],
   7: [
-    {id:'7-1', name:'신뢰성 평가'},
-    {id:'7-2', name:'고객사 요청 평가'},
+    {id:'7-1', name:'STD 측정'},
+    {id:'7-2', name:'샘플 측정'},
+    {id:'7-3', name:'신뢰성 평가'},
+    {id:'7-4', name:'고객사 요청 평가'},
   ],
   8: [],
   9: [],
@@ -2478,7 +2479,7 @@ function downloadTemplate() {
     'O-ring 규격 불일치 발생',
     '김장미'
   ];
-  const stageNote = ['※ 작업단계: 1=납품/정위치, 2=다이크/지진브라켓, 3=유틸리티 턴온, 4=전기 턴온, 5=인터락테스트, 6=설비안정화 및 구동, 7=셋업평가, 8=셋업보고서 송부, 9=종료'];
+  const stageNote = ['※ 작업단계: 1=납품/정위치, 2=다이크/지진브라켓, 3=전기 턴온, 4=인터락테스트, 5=유틸리티 턴온/인증, 6=설비안정화 및 구동, 7=셋업평가, 8=셋업보고서 송부, 9=종료'];
   const typeNote = ['※ 이슈유형: 하드웨어_원자재 / 하드웨어_휴먼 / 소프트웨어 / 기타 (이슈 없으면 빈칸)'];
 
   const wb = XLSX.utils.book_new();
