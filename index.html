@@ -219,7 +219,7 @@
       </div>
       <div class="form-group">
         <label>작업 단계</label>
-        <select id="log-stage" onchange="updateProgressPreview()">
+        <select id="log-stage" onchange="updateProgressPreview(); updateSubStageSelect()">
           <option value="">단계 선택</option>
           <option value="1">1단계 - 납품/정위치</option>
           <option value="2">2단계 - 다이크/지진브라켓</option>
@@ -231,6 +231,12 @@
           <option value="8">8단계 - 셋업보고서</option>
           <option value="9">9단계 - 종료</option>
         </select>
+        <div id="sub-stage-group" style="display:none;margin-top:8px">
+          <label style="font-size:12px;color:var(--muted);margin-bottom:4px">세부 단계 선택 <span style="font-weight:400">(선택사항)</span></label>
+          <select id="log-sub-stage">
+            <option value="">세부 단계 선택</option>
+          </select>
+        </div>
         <div class="progress-preview" id="progress-preview" style="display:none">
           <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
           <div class="progress-label" id="progress-label"></div>
@@ -303,15 +309,15 @@
               <th style="padding:8px 12px;text-align:left;white-space:nowrap;border:1px solid #6366F1">FAB</th>
               <th style="padding:8px 10px;text-align:center;white-space:nowrap;border:1px solid #6366F1">진행률</th>
               <th style="padding:8px 10px;text-align:center;white-space:nowrap;border:1px solid #6366F1">설비수량</th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">1단계<div style="font-size:9px;font-weight:400;opacity:.8">납품/정위치</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">2단계<div style="font-size:9px;font-weight:400;opacity:.8">다이크/지진브라켓</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">3단계<div style="font-size:9px;font-weight:400;opacity:.8">전기 턴온</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">4단계<div style="font-size:9px;font-weight:400;opacity:.8">인터락테스트/인증</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">5단계<div style="font-size:9px;font-weight:400;opacity:.8">유틸리티 턴온</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">6단계<div style="font-size:9px;font-weight:400;opacity:.8">설비안정화 및 구동</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">7단계<div style="font-size:9px;font-weight:400;opacity:.8">셋업평가</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">8단계<div style="font-size:9px;font-weight:400;opacity:.8">셋업보고서</div></th>
-              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px">9단계<div style="font-size:9px;font-weight:400;opacity:.8">종료</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(1)" data-stage="1" title="클릭하여 세부단계 펼치기/접기">1단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">납품/정위치</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(2)" data-stage="2" title="클릭하여 세부단계 펼치기/접기">2단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">다이크/지진브라켓</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(3)" data-stage="3" title="클릭하여 세부단계 펼치기/접기">3단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">전기 턴온</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(4)" data-stage="4" title="클릭하여 세부단계 펼치기/접기">4단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">인터락테스트/인증</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(5)" data-stage="5" title="클릭하여 세부단계 펼치기/접기">5단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">유틸리티 턴온</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(6)" data-stage="6" title="클릭하여 세부단계 펼치기/접기">6단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">설비안정화 및 구동</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px;cursor:pointer" onclick="toggleFabStage(7)" data-stage="7" title="클릭하여 세부단계 펼치기/접기">7단계 <span class="stage-arrow" style="font-size:9px;opacity:.7">▼</span><div style="font-size:9px;font-weight:400;opacity:.8">셋업평가</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px" data-stage="8">8단계<div style="font-size:9px;font-weight:400;opacity:.8">셋업보고서</div></th>
+              <th style="padding:8px 6px;text-align:center;border:1px solid #6366F1;min-width:60px" data-stage="9">9단계<div style="font-size:9px;font-weight:400;opacity:.8">종료</div></th>
             </tr>
           </thead>
           <tbody id="fab-summary-body">
@@ -502,6 +508,55 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 // 단계별 진척률
 const STAGE_PROGRESS = [0, 0, 10, 25, 35, 45, 55, 70, 90, 100];
 const STAGE_NAMES = ['','납품/정위치','다이크/지진브라켓','전기 턴온','인터락테스트/인증','유틸리티 턴온','설비안정화 및 구동','셋업평가','셋업보고서','종료'];
+
+// 세부 단계 정의
+const SUB_STAGES = {
+  1: [
+    {id:'1-1', name:'납품'},
+    {id:'1-2', name:'정위치'},
+    {id:'1-3', name:'수평 확인'},
+  ],
+  2: [
+    {id:'2-1', name:'다이크 납품'},
+    {id:'2-2', name:'다이크 설치'},
+    {id:'2-3', name:'다이크 에폭시'},
+    {id:'2-4', name:'다이크 침수테스트'},
+    {id:'2-5', name:'지진브라켓 설치'},
+  ],
+  3: [
+    {id:'3-1', name:'전기/LAN 턴온'},
+    {id:'3-2', name:'LAN 통신 확인'},
+  ],
+  4: [
+    {id:'4-1', name:'인터락테스트'},
+  ],
+  5: [
+    {id:'5-1', name:'EXH 턴온'},
+    {id:'5-2', name:'Bulk 턴온'},
+    {id:'5-3', name:'Drain 턴온'},
+    {id:'5-4', name:'UPW 턴온'},
+    {id:'5-5', name:'FOUP 센터 및 수평확인'},
+    {id:'5-6', name:'OHT 인증'},
+    {id:'5-7', name:'PIO(E84) 인증'},
+    {id:'5-8', name:'로봇 티칭'},
+  ],
+  6: [
+    {id:'6-1', name:'로컬테스트'},
+    {id:'6-2', name:'용액 설치'},
+    {id:'6-3', name:'설비안정화'},
+    {id:'6-4', name:'STD 측정'},
+    {id:'6-5', name:'샘플 측정'},
+  ],
+  7: [
+    {id:'7-1', name:'신뢰성 평가'},
+    {id:'7-2', name:'고객사 요청 평가'},
+  ],
+  8: [],
+  9: [],
+};
+
+// 세부단계 펼침 상태
+const expandedStages = new Set();
 
 // 진척률 기준 색상
 function getProgressColor(pct) {
@@ -779,6 +834,19 @@ function updateProgressPreview() {
   document.getElementById('progress-label').textContent = `${STAGE_NAMES[stage]} → 진척률 ${pct}%`;
 }
 
+function updateSubStageSelect() {
+  const stage = parseInt(document.getElementById('log-stage').value);
+  const group = document.getElementById('sub-stage-group');
+  const sel = document.getElementById('log-sub-stage');
+  if (!stage || !SUB_STAGES[stage] || SUB_STAGES[stage].length === 0) {
+    group.style.display = 'none';
+    return;
+  }
+  group.style.display = 'block';
+  sel.innerHTML = '<option value="">세부 단계 선택</option>' +
+    SUB_STAGES[stage].map(s => `<option value="${s.id}">${s.id} - ${s.name}</option>`).join('');
+}
+
 async function submitLog() {
   const projectId = document.getElementById('log-project').value;
   const stage = parseInt(document.getElementById('log-stage').value) || 0;
@@ -791,10 +859,11 @@ async function submitLog() {
   if (!content) { showMsg('log-msg','작업 내용을 입력해 주세요',false); return; }
 
   const unitId = document.getElementById('log-unit')?.value || null;
+  const subStage = document.getElementById('log-sub-stage')?.value || null;
   const {error} = await sb.from('work_logs').insert({
     project_id:projectId, user_id:currentUser.id,
     author_name:currentUserName, content, log_date:date,
-    stage, issue, issue_type: issueType, unit_id: unitId,
+    stage, sub_stage: subStage, issue, issue_type: issueType, unit_id: unitId,
   });
   if (error) { showMsg('log-msg','저장 실패: '+error.message,false); return; }
 
@@ -803,6 +872,8 @@ async function submitLog() {
   if (document.getElementById('log-issue-type')) document.getElementById('log-issue-type').value='';
   document.getElementById('log-stage').value='';
   document.getElementById('progress-preview').style.display='none';
+  if (document.getElementById('sub-stage-group')) document.getElementById('sub-stage-group').style.display='none';
+  if (document.getElementById('log-sub-stage')) document.getElementById('log-sub-stage').value='';
   showMsg('log-msg','저장됐어요! ✓',true);
   await loadMyRecentLogs();
 }
@@ -957,21 +1028,57 @@ async function saveEditLog(id, fromProjectId='', fromUnitId='') {
 }
 
 // ── FAB 요약판 ──
+function toggleFabStage(stageNum) {
+  const subs = SUB_STAGES[stageNum] || [];
+  if (!subs.length) return;
+
+  const table = document.getElementById('fab-summary-table');
+  if (!table) return;
+
+  if (expandedStages.has(stageNum)) {
+    expandedStages.delete(stageNum);
+  } else {
+    expandedStages.add(stageNum);
+  }
+  const isOpen = expandedStages.has(stageNum);
+
+  // 헤더 화살표 업데이트 (data-stage 속성으로 정확히 찾기)
+  const stageTh = table.querySelector(`thead th[data-stage="${stageNum}"]`);
+  if (stageTh) {
+    const arrow = stageTh.querySelector('.stage-arrow');
+    if (arrow) arrow.textContent = isOpen ? '▲' : '▼';
+    stageTh.style.borderBottom = isOpen ? '3px solid #A5B4FC' : '';
+  }
+
+  // 세부단계 컬럼 & 헤더 표시/숨김
+  table.querySelectorAll(`.sub-stage-col-${stageNum}, .sub-stage-th-${stageNum}`)
+    .forEach(el => { el.style.display = isOpen ? '' : 'none'; });
+
+  // 진척률 컬럼 업데이트
+  updateFabProgress();
+}
+
 async function loadFabSummary() {
   const tbody = document.getElementById('fab-summary-body');
   if (!tbody) return;
 
   // 모든 호기의 최대 단계 조회
   const {data:logs} = await sb.from('work_logs')
-    .select('unit_id, stage')
+    .select('unit_id, stage, sub_stage')
     .not('unit_id','is',null)
     .gt('stage', 0);
 
   // unit_id별 최대 단계
   const maxStageByUnit = {};
+  // unit_id별 완료된 세부단계 집합
+  const subStagesByUnit = {}; // { unit_id: Set(['1-1','1-2',...]) }
   (logs||[]).forEach(l => {
     if (!maxStageByUnit[l.unit_id] || l.stage > maxStageByUnit[l.unit_id]) {
       maxStageByUnit[l.unit_id] = l.stage;
+    }
+    if (l.sub_stage) {
+      if (!subStagesByUnit[l.unit_id]) subStagesByUnit[l.unit_id] = new Set();
+      subStagesByUnit[l.unit_id].add(l.sub_stage);
     }
   });
 
@@ -981,7 +1088,7 @@ async function loadFabSummary() {
     const fab = u.fab || '미지정';
     if (!fabMap[fab]) fabMap[fab] = { total:0, units:[] };
     fabMap[fab].total++;
-    fabMap[fab].units.push({ id:u.id, maxStage: maxStageByUnit[u.id] || 0 });
+    fabMap[fab].units.push({ id:u.id, maxStage: maxStageByUnit[u.id] || 0, subStages: subStagesByUnit[u.id] || new Set() });
   });
 
   if (!Object.keys(fabMap).length) {
@@ -990,7 +1097,7 @@ async function loadFabSummary() {
   }
 
   // 전체 합계 행 데이터
-  const allUnitsFlat = allUnits.map(u => ({ id:u.id, maxStage: maxStageByUnit[u.id]||0 }));
+  const allUnitsFlat = allUnits.map(u => ({ id:u.id, maxStage: maxStageByUnit[u.id]||0, subStages: subStagesByUnit[u.id] || new Set() }));
   const totalRow = buildFabRow('전체', allUnitsFlat, true);
 
   const rows = Object.entries(fabMap)
@@ -998,6 +1105,37 @@ async function loadFabSummary() {
     .map(([fab, {units}]) => buildFabRow(fab, units, false));
 
   tbody.innerHTML = rows.join('') + totalRow;
+  insertSubStageHeaders();
+}
+
+// 진척률 연동: 세부단계 펼침 상태에 따라 진행률 재계산
+function calcUnitPct(unit) {
+  // 펼쳐진 단계가 있으면 세부단계 기준으로 진척률 세분화
+  let pct = STAGE_PROGRESS[unit.maxStage] || 0;
+  if (unit.maxStage > 0 && expandedStages.has(unit.maxStage)) {
+    const subs = SUB_STAGES[unit.maxStage] || [];
+    if (subs.length > 0 && unit.subStages && unit.subStages.size > 0) {
+      const doneSubs = subs.filter(s => unit.subStages.has(s.id)).length;
+      const prevPct = STAGE_PROGRESS[unit.maxStage - 1] || 0;
+      const stepSize = pct - prevPct;
+      pct = prevPct + Math.round((doneSubs / subs.length) * stepSize);
+    }
+  }
+  return pct;
+}
+
+function updateFabProgress() {
+  // 진척률 셀 업데이트 (data-fab 속성으로 찾기)
+  const table = document.getElementById('fab-summary-table');
+  if (!table) return;
+  table.querySelectorAll('td[data-progress]').forEach(td => {
+    const pct = parseInt(td.dataset.progress);
+    const color = getProgressColor(pct);
+    td.innerHTML = `<div style="font-size:12px;font-weight:700;color:${color}">${pct}%</div>
+      <div style="background:#E2E8F0;border-radius:99px;height:4px;margin-top:3px">
+        <div style="width:${pct}%;background:${color};height:4px;border-radius:99px"></div>
+      </div>`;
+  });
 }
 
 function buildFabRow(label, units, isTotal) {
@@ -1009,21 +1147,34 @@ function buildFabRow(label, units, isTotal) {
     : 0;
   const color = getProgressColor(avgPct);
 
-  const stageCells = [1,2,3,4,5,6,7,8,9].map(s => {
+  let stageCells = '';
+  for (let s = 1; s <= 9; s++) {
     const done = units.filter(u => u.maxStage >= s).length;
-    const pct = total > 0 ? Math.round(done/total*100) : 0;
     const cellColor = done === total ? '#D1FAE5' : done > 0 ? '#FEF9C3' : '#fff';
-    return `<td style="padding:7px 6px;text-align:center;border:1px solid #E2E8F0;background:${cellColor}">
+    stageCells += `<td style="padding:7px 6px;text-align:center;border:1px solid #E2E8F0;background:${cellColor}">
       ${done > 0 ? `<div style="font-size:12px;font-weight:700">${done}/${total}</div>` : '<div style="color:#E2E8F0">—</div>'}
     </td>`;
-  }).join('');
+
+    // 세부단계 컬럼 (해당 단계 바로 뒤)
+    const subs = SUB_STAGES[s] || [];
+    subs.forEach(sub => {
+      const subDone = units.filter(u => u.subStages && u.subStages.has(sub.id)).length;
+      const subColor = subDone === total ? '#D1FAE5' : subDone > 0 ? '#EDE9FE' : '#FAFAFA';
+      const subPct = total > 0 ? Math.round(subDone / total * 100) : 0;
+      stageCells += `<td class="sub-stage-col-${s}" style="display:none;padding:5px 4px;text-align:center;border:1px solid #C4B5FD;background:${subColor};min-width:52px">
+        ${subDone > 0
+          ? `<div style="font-size:11px;font-weight:700;color:#6D28D9">${subDone}/${total}</div><div style="font-size:10px;color:#8B5CF6">${subPct}%</div>`
+          : '<div style="color:#DDD6FE;font-size:11px">—</div>'}
+      </td>`;
+    });
+  }
 
   const bg = isTotal ? '#F0FDF4' : 'white';
   const fontWeight = isTotal ? '700' : '400';
 
   return `<tr style="background:${bg}">
     <td style="padding:8px 12px;font-weight:${fontWeight};border:1px solid #E2E8F0;white-space:nowrap">${label}</td>
-    <td style="padding:8px 10px;text-align:center;border:1px solid #E2E8F0">
+    <td data-progress="${avgPct}" style="padding:8px 10px;text-align:center;border:1px solid #E2E8F0">
       <div style="font-size:12px;font-weight:700;color:${color}">${avgPct}%</div>
       <div style="background:#E2E8F0;border-radius:99px;height:4px;margin-top:3px">
         <div style="width:${avgPct}%;background:${color};height:4px;border-radius:99px"></div>
@@ -1032,6 +1183,34 @@ function buildFabRow(label, units, isTotal) {
     <td style="padding:8px 10px;text-align:center;font-weight:700;border:1px solid #E2E8F0">${total}</td>
     ${stageCells}
   </tr>`;
+}
+
+// FAB 표 로드 후 세부단계 헤더 동적 삽입 (단계 헤더 바로 뒤에 정확히 삽입)
+function insertSubStageHeaders() {
+  const table = document.getElementById('fab-summary-table');
+  if (!table) return;
+  const headerRow = table.querySelector('thead tr');
+  if (!headerRow) return;
+
+  // 기존 세부단계 헤더 제거
+  headerRow.querySelectorAll('.sub-stage-th').forEach(th => th.remove());
+
+  // data-stage 속성으로 단계 헤더 찾아서 세부단계 헤더 삽입
+  for (let s = 1; s <= 9; s++) {
+    const subs = SUB_STAGES[s] || [];
+    if (!subs.length) continue;
+    const stageTh = headerRow.querySelector(`th[data-stage="${s}"]`);
+    if (!stageTh) continue;
+
+    // 역순으로 insertAdjacentElement('afterend') 해야 순서 유지됨
+    [...subs].reverse().forEach(sub => {
+      const th = document.createElement('th');
+      th.className = `sub-stage-th sub-stage-th-${s}`;
+      th.style.cssText = `display:none;padding:6px 4px;text-align:center;border:1px solid #7C3AED;min-width:52px;background:#6D28D9;color:#fff;font-size:10px;font-weight:600;white-space:nowrap;line-height:1.4`;
+      th.innerHTML = `<div>${sub.id}</div><div style="font-weight:400;opacity:.85">${sub.name}</div>`;
+      stageTh.insertAdjacentElement('afterend', th);
+    });
+  }
 }
 
 // ── PJT 현황 ──
@@ -1205,7 +1384,7 @@ async function loadUnitHistory(projectId, unitId, btn) {
             style="padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:#fff;font-size:10px;font-weight:600;cursor:pointer;color:var(--muted)">수정</button>
         </div>
       </div>
-      ${log.stage?`<span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)</span>`:''}
+      ${log.stage?`<span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)${log.sub_stage?` · ${log.sub_stage}`:''}</span>`:''}
       ${log.equipment?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">📍 ${escHtml(log.equipment)}</div>`:''}
       <div class="history-content">${escHtmlBr(log.content)}</div>
       ${log.issue?`<div class="history-issue">⚠️ ${escHtmlBr(log.issue)}</div>`:''}
@@ -1892,7 +2071,7 @@ async function loadDailyReport() {
             ${logs.map(log => `
               <div style="margin-left:34px;margin-bottom:8px;padding:10px 12px;background:#F8FAFC;border-radius:10px;border-left:3px solid ${color}">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
-                  ${log.stage ? `<span style="font-size:10px;font-weight:700;background:var(--primary-light);color:var(--primary);padding:1px 7px;border-radius:5px">${log.stage}단계 · ${STAGE_NAMES[log.stage]}</span>` : ''}
+                  ${log.stage ? `<span style="font-size:10px;font-weight:700;background:var(--primary-light);color:var(--primary);padding:1px 7px;border-radius:5px">${log.stage}단계 · ${STAGE_NAMES[log.stage]}${log.sub_stage?' · '+log.sub_stage:''}</span>` : ''}
                   ${log.equipment_units?.name ? `<span style="font-size:10px;color:var(--muted)">📍 ${escHtml(log.equipment_units.name)}${log.equipment_units.fab?' · '+escHtml(log.equipment_units.fab):''}</span>` : ''}
                 </div>
                 <div style="font-size:13px;line-height:1.6">${escHtmlBr(log.content)}</div>
