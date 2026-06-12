@@ -954,12 +954,21 @@ async function openEditLogModal(id, fromProjectId='', fromUnitId='') {
     </div>
     <div class="form-group">
       <label>작업 단계</label>
-      <select id="edit-log-stage">
+      <select id="edit-log-stage" onchange="updateEditSubStageSelect(this.value, null)">
         <option value="0">단계 선택</option>
         ${[1,2,3,4,5,6,7,8,9].map(s=>
           `<option value="${s}" ${log.stage===s?'selected':''}>${s}단계 - ${STAGE_NAMES[s]}</option>`
         ).join('')}
       </select>
+      <div id="edit-sub-stage-group" style="margin-top:8px;${(SUB_STAGES[log.stage]||[]).length ? '' : 'display:none'}">
+        <label style="font-size:12px;color:var(--muted);margin-bottom:4px">세부 단계 <span style="font-weight:400">(선택사항)</span></label>
+        <select id="edit-log-sub-stage">
+          <option value="">세부 단계 선택</option>
+          ${(SUB_STAGES[log.stage]||[]).map(s=>
+            `<option value="${s.id}" ${log.sub_stage===s.id?'selected':''}>${s.id} - ${s.name}</option>`
+          ).join('')}
+        </select>
+      </div>
     </div>
     <div class="form-group">
       <label>작업 내용</label>
@@ -986,10 +995,28 @@ async function openEditLogModal(id, fromProjectId='', fromUnitId='') {
     <p id="edit-log-msg" style="margin-top:8px;font-size:13px;text-align:center"></p>`;
 }
 
+function updateEditSubStageSelect(stageVal, currentSubStage) {
+  const stage = parseInt(stageVal) || 0;
+  const group = document.getElementById('edit-sub-stage-group');
+  const sel = document.getElementById('edit-log-sub-stage');
+  if (!group || !sel) return;
+  const subs = SUB_STAGES[stage] || [];
+  if (!subs.length) {
+    group.style.display = 'none';
+    return;
+  }
+  group.style.display = 'block';
+  sel.innerHTML = '<option value="">세부 단계 선택</option>' +
+    subs.map(s =>
+      `<option value="${s.id}" ${currentSubStage===s.id?'selected':''}>${s.id} - ${s.name}</option>`
+    ).join('');
+}
+
 async function saveEditLog(id, fromProjectId='', fromUnitId='') {
   const date = document.getElementById('edit-log-date').value;
   const unitId = document.getElementById('edit-log-unit').value || null;
   const stage = parseInt(document.getElementById('edit-log-stage').value) || 0;
+  const subStage = document.getElementById('edit-log-sub-stage')?.value || null;
   const content = document.getElementById('edit-log-content').value.trim();
   const issueType = document.getElementById('edit-log-issue-type').value;
   const issue = document.getElementById('edit-log-issue').value.trim();
@@ -1001,7 +1028,7 @@ async function saveEditLog(id, fromProjectId='', fromUnitId='') {
   }
 
   const {error} = await sb.from('work_logs').update({
-    log_date: date, unit_id: unitId, stage,
+    log_date: date, unit_id: unitId, stage, sub_stage: subStage,
     content, issue_type: issueType, issue,
   }).eq('id', id);
 
