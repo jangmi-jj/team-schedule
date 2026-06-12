@@ -174,6 +174,7 @@ let allUnits=[], allLogs=[], allSubLogs=[], allTargets=[], allFabStatus={};
 let expandedFabs = new Set();
 let expandedStages = new Set(); // 세부단계 펼침
 let visibleFabs = new Set();    // 관리자 설정 표시 FAB
+let visibleUnits = null;        // 숨긴 호기 set (unit_id 기준) - null이면 전체 표시
 let urlFabs = null;             // URL 파라미터로 지정된 FAB 목록
 
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
@@ -254,6 +255,12 @@ async function loadAll(){
   allTargets=targets||[];
   allFabStatus={};
   (fabList||[]).forEach(f=>{allFabStatus[f.fab]=f;});
+  // hidden_units 파싱 (fab_status에 JSON으로 저장)
+  visibleUnits = new Set();
+  (fabList||[]).forEach(f=>{
+    const hidden = f.hidden_units ? (()=>{try{return JSON.parse(f.hidden_units);}catch(e){return [];}})() : [];
+    hidden.forEach(uid => visibleUnits.add(uid));
+  });
   document.getElementById('last-updated').textContent='업데이트: '+new Date().toLocaleString('ko-KR',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
 }
 
@@ -337,6 +344,47 @@ function toggleFabVisible(fab){
   renderAll();
 }
 
+function toggleUnitVisible(unitId, fab){
+  if(!currentUser)return;
+  if(!visibleUnits) visibleUnits=new Set();
+  if(visibleUnits.has(unitId)) visibleUnits.delete(unitId); // 숨김 해제
+  else visibleUnits.add(unitId); // 숨김
+  saveUnitVisibility(fab);
+  renderFabManagePanel(buildFabMap());
+  renderAll();
+}
+
+function toggleAllUnits(fab, showAll){
+  if(!currentUser)return;
+  if(!visibleUnits) visibleUnits=new Set();
+  const fabMap=buildFabMap();
+  const units=fabMap[fab]||[];
+  if(showAll){
+    units.forEach(u=>visibleUnits.delete(u.id));
+  } else {
+    units.forEach(u=>visibleUnits.add(u.id));
+  }
+  saveUnitVisibility(fab);
+  renderFabManagePanel(fabMap);
+  renderAll();
+}
+
+async function saveUnitVisibility(fab){
+  if(!currentUser)return;
+  const fabMap=buildFabMap();
+  const units=fabMap[fab]||[];
+  const hiddenIds=units.filter(u=>visibleUnits&&visibleUnits.has(u.id)).map(u=>u.id);
+  const existing=allFabStatus[fab]||{};
+  const {error}=await sb.from('fab_status').upsert({
+    ...existing, fab,
+    hidden_units: JSON.stringify(hiddenIds),
+    updated_at: new Date().toISOString()
+  },{onConflict:'fab'});
+  if(!error){
+    allFabStatus[fab]={...existing, fab, hidden_units: JSON.stringify(hiddenIds)};
+  }
+}
+
 // ── 헤더 렌더링 ──
 function renderHeader(){
   const thead=document.getElementById('main-thead');
@@ -367,10 +415,29 @@ function renderHeader(){
 function renderFabManagePanel(fabMap){
   const list=document.getElementById('fab-toggle-list');
   const fabs=Object.keys(fabMap).sort((a,b)=>a.localeCompare(b,'ko'));
-  list.innerHTML=fabs.map(fab=>`
-    <button class="fab-toggle-btn ${visibleFabs.has(fab)?'visible':''}" onclick="toggleFabVisible('${fab}')">
-      ${visibleFabs.has(fab)?'👁':'🙈'} ${escHtml(fab)}
-    </button>`).join('');
+  list.innerHTML=fabs.map(fab=>{
+    const units=fabMap[fab]||[];
+    const fabKey=fab.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+    const unitBtns=units.map(u=>{
+      const hidden=visibleUnits&&visibleUnits.has(u.id);
+      return `<button class="fab-toggle-btn ${!hidden?'visible':''}" style="font-size:11px;padding:3px 8px"
+        onclick="event.stopPropagation();toggleUnitVisible('${u.id}','${fab}')">
+        ${!hidden?'👁':'🙈'} ${escHtml(u.name)}
+      </button>`;
+    }).join('');
+
+    return `<div style="margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+        <button class="fab-toggle-btn ${visibleFabs.has(fab)?'visible':''}" onclick="toggleFabVisible('${fab}')">
+          ${visibleFabs.has(fab)?'👁':'🙈'} ${escHtml(fab)}
+        </button>
+        <span style="font-size:10px;color:var(--muted)">${units.length}대</span>
+        <button onclick="toggleAllUnits('${fab}',true)" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:#fff;cursor:pointer;color:var(--muted)">전체표시</button>
+        <button onclick="toggleAllUnits('${fab}',false)" style="font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid var(--border);background:#fff;cursor:pointer;color:var(--muted)">전체숨김</button>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;padding-left:12px">${unitBtns}</div>
+    </div>`;
+  }).join('<hr style="border:none;border-top:1px solid var(--border);margin:6px 0">');
 }
 
 // ── 요약 카드 ──
@@ -485,7 +552,7 @@ function renderTable(fabMap){
 
     // 호기 행
     if(isExp){
-      units.forEach(u=>{
+      units.filter(u=>!visibleUnits||!visibleUnits.has(u.id)).forEach(u=>{
         const uPct=STAGE_PROGRESS[u.maxStage]||0;
         const uColor=getProgressColor(uPct);
         const nextStage=u.maxStage<9?u.maxStage+1:null;
