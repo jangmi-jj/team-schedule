@@ -239,11 +239,13 @@
           <div id="sub-item-group" style="display:none;margin-top:10px">
             <label style="font-size:12px;color:var(--muted);margin-bottom:6px">세부 항목 선택</label>
             <div id="multi-checkbox-group" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
-            <div style="display:flex;gap:8px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
               <button type="button" class="btn btn-outline btn-sm" onclick="selectAllMulti()">전체 선택</button>
-              <button type="button" class="btn btn-primary btn-sm" onclick="submitMultiComplete()" id="multi-complete-btn" style="display:none">✅ 이걸로 완료</button>
+              <button type="button" class="btn btn-primary btn-sm" onclick="submitMultiComplete('full')" id="multi-complete-btn" style="display:none">✅ 이상태로 완료처리</button>
+              <button type="button" class="btn btn-sm" onclick="submitMultiComplete('partial')" id="multi-partial-btn"
+                style="display:none;background:#F59E0B;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer">⚡ 해당 항목만으로 완료 처리</button>
             </div>
-            <p style="font-size:11px;color:var(--muted);margin-top:6px">※ 필요한 항목만 선택 후 '이걸로 완료'를 눌러야 진척률이 반영됩니다</p>
+            <p id="multi-hint" style="font-size:11px;color:var(--muted);margin-top:6px">※ 항목을 선택하면 완료 버튼이 나타납니다</p>
           </div>
         </div>
         <div class="progress-preview" id="progress-preview" style="display:none">
@@ -870,6 +872,10 @@ function updateSubStageSelect() {
   if (container) container.innerHTML = '';
   const completeBtn = document.getElementById('multi-complete-btn');
   if (completeBtn) completeBtn.style.display = 'none';
+  const partialBtn2 = document.getElementById('multi-partial-btn');
+  if (partialBtn2) partialBtn2.style.display = 'none';
+  const hint2 = document.getElementById('multi-hint');
+  if (hint2) hint2.textContent = '※ 항목을 선택하면 완료 버튼이 나타납니다';
 }
 
 function updateSubItemCheckboxes() {
@@ -906,9 +912,21 @@ function updateSubItemCheckboxes() {
 }
 
 function onMultiCheckChange(checkbox) {
-  const anyChecked = document.querySelectorAll('#multi-checkbox-group input[type="checkbox"]:checked').length > 0;
+  const checked = document.querySelectorAll('#multi-checkbox-group input[type="checkbox"]:checked').length;
+  const total = document.querySelectorAll('#multi-checkbox-group input[type="checkbox"]').length;
   const completeBtn = document.getElementById('multi-complete-btn');
-  if (completeBtn) completeBtn.style.display = anyChecked ? 'inline-flex' : 'none';
+  const partialBtn = document.getElementById('multi-partial-btn');
+  const hint = document.getElementById('multi-hint');
+  if (completeBtn) completeBtn.style.display = (checked > 0 && checked === total) ? 'inline-flex' : 'none';
+  if (partialBtn) {
+    // 전체 미선택 && 1개 이상 선택 시 partial 버튼 표시
+    partialBtn.style.display = (checked > 0 && checked < total) ? 'inline-flex' : 'none';
+  }
+  if (hint) {
+    if (checked === 0) hint.textContent = '※ 항목을 선택하면 완료 버튼이 나타납니다';
+    else if (checked < total) hint.textContent = `※ ${checked}/${total}개 선택됨 — 설비에 불필요한 항목은 "해당 항목만으로 완료 처리"를 누르세요`;
+    else hint.textContent = `※ 전체 선택됨 — "이상태로 완료처리"를 눌러 진척률을 반영하세요`;
+  }
 
   const label = checkbox.closest('label');
   if (checkbox.checked) {
@@ -929,9 +947,15 @@ function selectAllMulti() {
   });
   const completeBtn = document.getElementById('multi-complete-btn');
   if (completeBtn) completeBtn.style.display = 'inline-flex';
+  const partialBtn = document.getElementById('multi-partial-btn');
+  if (partialBtn) partialBtn.style.display = 'none';
+  const hint = document.getElementById('multi-hint');
+  const total = document.querySelectorAll('#multi-checkbox-group input[type="checkbox"]').length;
+  if (hint) hint.textContent = `※ 전체 선택됨(${total}개) — "이상태로 완료처리"를 눌러 진척률을 반영하세요`;
 }
 
-async function submitMultiComplete() {
+async function submitMultiComplete(mode) {
+  // mode: 'full' = 전체 선택 완료, 'partial' = 일부 선택으로 완료 처리
   const projectId = document.getElementById('log-project').value;
   const content = document.getElementById('log-content').value.trim();
   const date = document.getElementById('log-date').value;
@@ -946,6 +970,18 @@ async function submitMultiComplete() {
   const subStageId = document.getElementById('log-sub-stage')?.value;
   if (!checked.length) { showMsg('log-msg','항목을 선택해 주세요',false); return; }
 
+  // 부분 완료 시 확인 다이얼로그
+  if (mode === 'partial') {
+    const selectedItems = checked.map(cb => cb.value.split('::')[1]).join(', ');
+    const totalCount = document.querySelectorAll('#multi-checkbox-group input[type="checkbox"]').length;
+    const ok = window.confirm(
+      `⚡ 해당 항목만으로 완료 처리\n\n` +
+      `선택된 항목 (${checked.length}/${totalCount}개): ${selectedItems}\n\n` +
+      `이 설비는 위 항목만 적용되므로 5단계를 완료 처리합니다.\n계속하시겠습니까?`
+    );
+    if (!ok) return;
+  }
+
   // 체크된 각 항목 개별 저장
   const rows = checked.map(cb => ({
     project_id: projectId, user_id: currentUser.id,
@@ -956,10 +992,11 @@ async function submitMultiComplete() {
 
   // 완료 확정 행 추가 (진척률 반영용 - 5-1 또는 5-2)
   const selectedItems = checked.map(cb => cb.value.split('::')[1]).join(', ');
+  const modeLabel = mode === 'partial' ? '[부분완료]' : '[완료]';
   rows.push({
     project_id: projectId, user_id: currentUser.id,
     author_name: currentUserName,
-    content: `[완료] ${subStageId} (${selectedItems})`,
+    content: `${modeLabel} ${subStageId} (${selectedItems})`,
     log_date: date, stage: 5, sub_stage: subStageId,
     issue: '', issue_type: '', unit_id: unitId,
   });
@@ -975,10 +1012,14 @@ async function submitMultiComplete() {
   document.getElementById('sub-item-group').style.display = 'none';
   document.getElementById('multi-checkbox-group').innerHTML = '';
   document.getElementById('multi-complete-btn').style.display = 'none';
+  const partialBtn = document.getElementById('multi-partial-btn');
+  if (partialBtn) partialBtn.style.display = 'none';
   document.getElementById('log-sub-stage').value = '';
   if (document.getElementById('log-issue')) document.getElementById('log-issue').value = '';
   if (document.getElementById('log-issue-type')) document.getElementById('log-issue-type').value = '';
-  showMsg('log-msg','저장됐어요! ✓', true);
+  const hint = document.getElementById('multi-hint');
+  if (hint) hint.textContent = '※ 항목을 선택하면 완료 버튼이 나타납니다';
+  showMsg('log-msg', mode === 'partial' ? '부분 완료 처리됐어요! ✓' : '저장됐어요! ✓', true);
   await loadMyRecentLogs();
 }
 
