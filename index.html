@@ -879,9 +879,11 @@ function updateSubStageSelect() {
   if (hint2) hint2.textContent = '※ 항목을 선택하면 완료 버튼이 나타납니다';
 }
 
-function updateSubItemCheckboxes() {
+async function updateSubItemCheckboxes() {
   const stage = parseInt(document.getElementById('log-stage').value);
   const subStageId = document.getElementById('log-sub-stage').value;
+  const unitId = document.getElementById('log-unit')?.value || null;
+  const projectId = document.getElementById('log-project')?.value || null;
   const itemGroup = document.getElementById('sub-item-group');
   const container = document.getElementById('multi-checkbox-group');
   const completeBtn = document.getElementById('multi-complete-btn');
@@ -890,22 +892,47 @@ function updateSubItemCheckboxes() {
 
   const sub = (SUB_STAGES[stage]||[]).find(s => s.id === subStageId);
 
-  // 체크박스가 있는 세부단계 (type: 'multi')
   if (sub && sub.items && sub.items.length > 0) {
     itemGroup.style.display = 'block';
-    container.innerHTML = sub.items.map(item => `
-      <label style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;background:#fff;transition:all .15s"
+    container.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:4px 0">불러오는 중...</div>';
+    if (completeBtn) completeBtn.style.display = 'none';
+
+    // 기존 작업 이력 조회
+    let doneItems = new Set();
+    if (unitId && projectId) {
+      const {data} = await sb.from('work_logs')
+        .select('sub_stage')
+        .eq('project_id', projectId)
+        .eq('unit_id', unitId)
+        .eq('stage', 5)
+        .like('sub_stage', subStageId + '::%');
+      (data||[]).forEach(row => {
+        // "5-1::EXH,UPW,Drain" → ["EXH","UPW","Drain"]
+        const itemsPart = (row.sub_stage||'').split('::')[1] || '';
+        itemsPart.split(',').map(s=>s.trim()).filter(Boolean).forEach(i => doneItems.add(i));
+      });
+    }
+
+    container.innerHTML = sub.items.map(item => {
+      const isDone = doneItems.has(item);
+      return `<label style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;background:#fff;transition:all .15s;position:relative"
         onmouseover="this.style.borderColor='var(--primary)'"
         onmouseout="if(!this.querySelector('input').checked)this.style.borderColor='var(--border)'">
         <input type="checkbox" value="${subStageId}::${item}"
           onchange="onMultiCheckChange(this)"
           style="width:15px;height:15px;accent-color:var(--primary)">
-        ${item}
-      </label>
-    `).join('');
+        ${item}${isDone ? ` <span title="이전에 작업된 항목" style="font-size:9px;font-weight:700;color:#059669;background:#D1FAE5;padding:1px 4px;border-radius:3px;margin-left:2px">완료</span>` : ''}
+      </label>`;
+    }).join('');
+
+    // 힌트에 기존 완료 항목 안내
+    const hint = document.getElementById('multi-hint');
+    if (hint && doneItems.size > 0) {
+      hint.textContent = `※ 이전 작업: ${[...doneItems].join(', ')} 완료됨 — 추가 항목을 선택하거나 전체 완료처리 하세요`;
+    }
+
     if (completeBtn) completeBtn.style.display = 'none';
   } else {
-    // 체크박스 없는 일반 세부단계
     itemGroup.style.display = 'none';
     container.innerHTML = '';
     if (completeBtn) completeBtn.style.display = 'none';
