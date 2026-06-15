@@ -322,7 +322,7 @@ function buildFabMap(){
       const subs=SUB_STAGES[s]||[];
       if(!subs.length)return;
       if(s===5){
-        // 5단계: '5-1','5-2' 완료 확정 행만 완료로 인정
+        // 5단계: '5-1','5-2' 완료 확정 행 ([완료] 또는 [부분완료]) 또는 sub_stage가 정확히 '5-1'/'5-2'인 행만 완료로 인정
         subs.forEach(sub=>{if(recorded.has(sub.id))eff.add(sub.id);});
       } else {
         // 그 외: sub_stage 기록 없으면 전부 완료, 있으면 기록된 것만
