@@ -987,8 +987,9 @@ async function submitMultiComplete(mode) {
   const selectedItems = checkedItems.join(', ');
   // 체크 항목을 쉼표로 묶어 sub_stage 1개 행에 저장 (예: "5-1::EXH,UPW,Drain")
   const combinedSubStage = subStageId + '::' + checkedItems.join(',');
-  // full 모드는 항상 [완료], partial은 [부분완료]
-  const modeLabel = mode === 'partial' ? '[부분완료]' : '[완료]';
+  // "해당 항목만으로 완료 처리"(partial) = 이 설비엔 이 항목만 해당 → [완료]
+  // full도 [완료] → 항상 [완료]
+  const modeLabel = '[완료]';
 
   // 작업 본문 행 저장 (1개)
   const {error: e1} = await sb.from('work_logs').insert({
@@ -1385,7 +1386,9 @@ async function saveEditLog(id, fromProjectId='', fromUnitId='') {
     const checkedItems = [...document.querySelectorAll('input[name="edit-sub-item"]:checked')];
     const totalItems = document.querySelectorAll('input[name="edit-sub-item"]').length;
     // full 모드는 [완료], partial 또는 일부 선택이면 [부분완료]
-    const modeLabel = (isPartial || (checkedItems.length > 0 && checkedItems.length < totalItems)) ? '[부분완료]' : '[완료]';
+    // "해당 항목만으로 완료 처리"(isPartial) = 이 설비엔 이 항목만 해당 → [완료]
+    // 플래그 없이 일부만 체크된 채 저장하면 → [부분완료]
+    const modeLabel = (isPartial || checkedItems.length === totalItems) ? '[완료]' : '[부분완료]';
 
     // 체크 항목들을 쉼표로 묶어 sub_stage 1개 값으로 저장
     const checkedNames = checkedItems.map(cb => cb.value.split('::')[1]);
