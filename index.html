@@ -1105,6 +1105,19 @@ function confirmDeleteLog(id) {
   });
 }
 
+function confirmDeleteHistoryLog(id, fromProjectId, fromUnitId) {
+  showModal('작업 삭제', '이 작업 기록을 삭제할까요?', async () => {
+    await sb.from('work_logs').delete().eq('id', id);
+    closeModal();
+    await loadMyRecentLogs();
+    if (fromProjectId) {
+      const btn = document.querySelector(`#unit-hist-${fromProjectId}`)
+        ?.previousElementSibling?.querySelector('.unit-tab.active');
+      await loadUnitHistory(fromProjectId, fromUnitId || null, btn);
+    }
+  });
+}
+
 async function openEditLogModal(id, fromProjectId='', fromUnitId='') {
   const modal = document.getElementById('confirm-modal');
   const box = modal.querySelector('.modal-box');
@@ -1994,6 +2007,8 @@ async function loadUnitHistory(projectId, unitId, btn) {
           <span class="history-date">${log.log_date}</span>
           <button onclick="openEditLogModal('${log.id}','${projectId}','${unitId||''}')"
             style="padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:#fff;font-size:10px;font-weight:600;cursor:pointer;color:var(--muted)">수정</button>
+          <button onclick="confirmDeleteHistoryLog('${log.id}','${projectId}','${unitId||''}')"
+            style="padding:2px 6px;border-radius:6px;border:1px solid #FCA5A5;background:#fff;font-size:12px;cursor:pointer;color:#EF4444;font-weight:700;line-height:1">✕</button>
         </div>
       </div>
       ${log.stage?`<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:4px"><span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)${log.sub_stage?` · ${formatSubStage(log.sub_stage)}`:''}</span>${log._confirmTags||''}</div>`:''}
