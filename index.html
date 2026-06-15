@@ -824,13 +824,14 @@ async function viewProjectHistory(id, name, color) {
   const el = document.getElementById('history-content');
   if (!data||!data.length) { el.innerHTML='<p class="log-empty">아직 작업 기록이 없어요</p>'; return; }
 
-  el.innerHTML = data.map(log=>`
+  const merged = mergeCompletionLogs(data);
+  el.innerHTML = merged.map(log=>`
     <div class="history-item">
       <div class="history-item-header">
         <span class="history-author">${escHtml(log.author_name||'')}</span>
         <span class="history-date">${log.log_date}</span>
       </div>
-      ${log.stage ? `<span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)</span>` : ''}
+      ${log.stage ? `<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:4px"><span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)</span>${log._confirmTags||''}</div>` : ''}
       ${log.equipment ? `<div style="font-size:11px;color:var(--muted);margin-bottom:4px">📍 ${escHtml(log.equipment)}</div>` : ''}
       <div class="history-content">${escHtmlBr(log.content)}</div>
       ${log.issue ? `<div class="history-issue">⚠️ ${escHtmlBr(log.issue)}</div>` : ''}
@@ -967,8 +968,11 @@ async function submitMultiComplete(mode) {
   if (!content) { showMsg('log-msg','작업 내용을 입력해 주세요',false); return; }
 
   const checked = [...document.querySelectorAll('#multi-checkbox-group input[type="checkbox"]:checked')];
-  const subStageId = document.getElementById('log-sub-stage')?.value;
+  // subStageId: 드롭다운 값 우선, 없으면 체크박스 value(예: '5-1::EXH')에서 앞부분 추출
+  const rawSubStageId = document.getElementById('log-sub-stage')?.value;
+  const subStageId = rawSubStageId || (checked.length > 0 ? checked[0].value.split('::')[0] : '');
   if (!checked.length) { showMsg('log-msg','항목을 선택해 주세요',false); return; }
+  if (!subStageId) { showMsg('log-msg','세부 단계를 선택해 주세요',false); return; }
 
   // 부분 완료 시 확인 다이얼로그
   if (mode === 'partial') {
@@ -1943,7 +1947,8 @@ async function loadUnitHistory(projectId, unitId, btn) {
   const {data} = await query;
   if (!data||!data.length) { histEl.innerHTML='<p class="log-empty">작업 기록이 없어요</p>'; return; }
 
-  histEl.innerHTML = data.map(log=>`
+  const merged = mergeCompletionLogs(data);
+  histEl.innerHTML = merged.map(log=>`
     <div class="history-item">
       <div class="history-item-header">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
@@ -1956,7 +1961,7 @@ async function loadUnitHistory(projectId, unitId, btn) {
             style="padding:2px 8px;border-radius:6px;border:1px solid var(--border);background:#fff;font-size:10px;font-weight:600;cursor:pointer;color:var(--muted)">수정</button>
         </div>
       </div>
-      ${log.stage?`<span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)${log.sub_stage?` · ${log.sub_stage}`:''}</span>`:''}
+      ${log.stage?`<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:4px"><span class="history-stage">${log.stage}단계 - ${STAGE_NAMES[log.stage]} (${STAGE_PROGRESS[log.stage]}%)${log.sub_stage?` · ${log.sub_stage}`:''}</span>${log._confirmTags||''}</div>`:''}
       ${log.equipment?`<div style="font-size:11px;color:var(--muted);margin-bottom:4px">📍 ${escHtml(log.equipment)}</div>`:''}
       <div class="history-content">${escHtmlBr(log.content)}</div>
       ${log.issue?`<div class="history-issue">⚠️ ${escHtmlBr(log.issue)}</div>`:''}
@@ -2631,19 +2636,22 @@ async function loadDailyReport() {
         </div>
 
         <!-- 작업자별 내용 -->
-        ${Object.entries(byWorker).map(([worker, logs]) => `
+        ${Object.entries(byWorker).map(([worker, logs]) => {
+          const mergedLogs = mergeCompletionLogs(logs);
+          return `
           <div style="padding:12px 16px;border-bottom:1px solid #F1F5F9">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
               <div style="width:26px;height:26px;border-radius:50%;background:var(--primary-light);color:var(--primary);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">
                 ${escHtml(worker.charAt(0))}
               </div>
               <span style="font-size:13px;font-weight:700">${escHtml(worker)}</span>
-              <span style="font-size:11px;color:var(--muted)">${logs.length}건</span>
+              <span style="font-size:11px;color:var(--muted)">${mergedLogs.length}건</span>
             </div>
-            ${logs.map(log => `
+            ${mergedLogs.map(log => `
               <div style="margin-left:34px;margin-bottom:8px;padding:10px 12px;background:#F8FAFC;border-radius:10px;border-left:3px solid ${color}">
                 <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap">
                   ${log.stage ? `<span style="font-size:10px;font-weight:700;background:var(--primary-light);color:var(--primary);padding:1px 7px;border-radius:5px">${log.stage}단계 · ${STAGE_NAMES[log.stage]}${log.sub_stage?' · '+log.sub_stage:''}</span>` : ''}
+                  ${log._confirmTags || ''}
                   ${log.equipment_units?.name ? `<span style="font-size:10px;color:var(--muted)">📍 ${escHtml(log.equipment_units.name)}${log.equipment_units.fab?' · '+escHtml(log.equipment_units.fab):''}</span>` : ''}
                 </div>
                 <div style="font-size:13px;line-height:1.6">${escHtmlBr(log.content)}</div>
@@ -2652,7 +2660,8 @@ async function loadDailyReport() {
                     ⚠️ ${log.issue_type ? `<span style="font-weight:700">[${escHtml(log.issue_type)}]</span> ` : ''}${escHtmlBr(log.issue)}
                   </div>` : ''}
               </div>`).join('')}
-          </div>`).join('')}
+          </div>`;
+        }).join('')}
       </div>`;
     }).join('')}`;
 }
@@ -3052,6 +3061,39 @@ function showModal(title, body, cb) {
   modal.classList.remove('hidden');
 }
 function closeModal() { document.getElementById('confirm-modal').classList.add('hidden'); }
+
+// ── 완료 확정 행 병합 유틸 ──
+// [완료]/[부분완료]로 시작하는 확정 행을 본문 행에 흡수시켜 하나의 카드로 표시
+function mergeCompletionLogs(logs) {
+  const CONFIRM_RE = /^\[(완료|부분완료)\]/;
+  const confirmMap = {};
+  const normalLogs = [];
+
+  logs.forEach(log => {
+    if (log.content && CONFIRM_RE.test(log.content)) {
+      const key = `${log.unit_id}__${log.stage}__${log.log_date}`;
+      if (!confirmMap[key]) confirmMap[key] = [];
+      confirmMap[key].push(log);
+    } else {
+      normalLogs.push(log);
+    }
+  });
+
+  // 본문 행에 완료 태그 주입
+  return normalLogs.map(log => {
+    const key = `${log.unit_id}__${log.stage}__${log.log_date}`;
+    const confirms = confirmMap[key] || [];
+    const tags = confirms.map(c => {
+      const isPartial = c.content.startsWith('[부분완료]');
+      const color = isPartial ? '#D97706' : '#059669';
+      const bg    = isPartial ? '#FEF3C7' : '#D1FAE5';
+      const label = isPartial ? '부분완료' : '완료';
+      const subLabel = c.sub_stage && !c.sub_stage.includes('::') ? ` · ${c.sub_stage}` : '';
+      return `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:${bg};color:${color}">✓ ${label}${subLabel}</span>`;
+    }).join(' ');
+    return { ...log, _confirmTags: tags };
+  });
+}
 
 // ── 유틸 ──
 function toDateStr(d) { return d.toISOString().split('T')[0]; }
