@@ -2860,66 +2860,51 @@ function filterIssues() {
     '소프트웨어':'#4F46E5','기타':'#94A3B8'
   };
 
-  el.innerHTML = `
-    <div style="overflow-x:auto">
-    <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
-      <colgroup>
-        <col style="width:70px">
-        <col style="width:180px">
-        <col style="width:130px">
-        <col style="width:110px">
-        <col style="width:auto">
-        <col style="width:100px">
-        <col style="width:110px">
-      </colgroup>
-      <thead>
-        <tr style="background:#F8FAFC;border-bottom:2px solid var(--border)">
-          <th style="padding:10px 10px;text-align:left;font-size:11px;color:var(--muted)">상태</th>
-          <th style="padding:10px 10px;text-align:left;font-size:11px;color:var(--muted)">프로젝트</th>
-          <th style="padding:10px 10px;text-align:left;font-size:11px;color:var(--muted)">호기</th>
-          <th style="padding:10px 10px;text-align:left;font-size:11px;color:var(--muted)">이슈 유형</th>
-          <th style="padding:10px 10px;text-align:left;font-size:11px;color:var(--muted)">이슈 내용</th>
-          <th style="padding:10px 10px;text-align:left;font-size:11px;color:var(--muted)">등록자·일자</th>
-          <th style="padding:10px 10px;text-align:left;font-size:11px;color:var(--muted)">해결자·일자</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${list.map(i=>`
-        <tr style="border-bottom:1px solid var(--border);background:${i.issue_resolved?'#fff':'#FFFBF0'}">
-          <td style="padding:10px 10px">
-            <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;display:inline-block;background:${i.issue_resolved?'#D1FAE5':'#FEF3C7'};color:${i.issue_resolved?'#10B981':'#D97706'}">
-              ${i.issue_resolved?'✓ 해결':'미해결'}
-            </span>
-          </td>
-          <td style="padding:10px 10px;font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(i.projects?.name||'')}">
-            ${escHtml(i.projects?.name||'-')}
-          </td>
-          <td style="padding:10px 10px;font-size:11px">
-            ${i.equipment_units?.name
-              ? `<div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(i.equipment_units.name)}</div>
-                 <div style="font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${[i.equipment_units.fab,i.equipment_units.location].filter(Boolean).join(' · ')}</div>`
-              : '-'}
-          </td>
-          <td style="padding:10px 10px">
-            ${i.issue_type
-              ? `<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;background:${TYPE_COLOR[i.issue_type]||'#94A3B8'}20;color:${TYPE_COLOR[i.issue_type]||'#94A3B8'};display:inline-block">${escHtml(i.issue_type)}</span>`
-              : '-'}
-          </td>
-          <td style="padding:10px 10px;font-size:12px;line-height:1.6;word-break:keep-all">${escHtmlBr(i.issue)}</td>
-          <td style="padding:10px 10px;font-size:10px;color:var(--muted)">
-            <div style="font-weight:600;color:var(--text)">${escHtml(i.author_name||'')}</div>
-            <div>${i.log_date||''}</div>
-          </td>
-          <td style="padding:10px 10px;font-size:10px;color:var(--muted)">
-            ${i.issue_resolved
-              ? `<div style="font-weight:600;color:#059669">${escHtml(i.issue_resolved_by||'')}</div>
-                 <div>${i.issue_resolved_date||''}</div>`
-              : `<span style="color:#D97706;font-size:10px">—</span>`}
-          </td>
-        </tr>`).join('')}
-      </tbody>
-    </table>
+  el.innerHTML = list.map(i => {
+    const isResolved = i.issue_resolved;
+    const typeColor = TYPE_COLOR[i.issue_type] || '#94A3B8';
+    const unitInfo = i.equipment_units
+      ? `${i.equipment_units.name || ''}${[i.equipment_units.fab, i.equipment_units.location].filter(Boolean).length ? ' · ' + [i.equipment_units.fab, i.equipment_units.location].filter(Boolean).join(' · ') : ''}`
+      : '';
+
+    return `
+    <div style="border:1px solid ${isResolved ? 'var(--border)' : '#FCD34D'};border-left:4px solid ${isResolved ? '#10B981' : '#F59E0B'};border-radius:10px;padding:14px 16px;margin-bottom:10px;background:${isResolved ? '#fff' : '#FFFBF0'}">
+      <!-- 상단: 상태 + 프로젝트 + 호기 + 이슈유형 -->
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <span style="font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;background:${isResolved ? '#D1FAE5' : '#FEF3C7'};color:${isResolved ? '#059669' : '#D97706'};white-space:nowrap">
+          ${isResolved ? '✓ 해결' : '미해결'}
+        </span>
+        <span style="font-size:11px;color:var(--muted);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px" title="${escHtml(i.projects?.name||'')}">
+          ${escHtml(i.projects?.name || '-')}
+        </span>
+        ${unitInfo ? `<span style="font-size:11px;font-weight:700;background:#F1F5F9;padding:2px 8px;border-radius:5px;white-space:nowrap">${escHtml(unitInfo)}</span>` : ''}
+        ${i.issue_type ? `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;background:${typeColor}18;color:${typeColor};white-space:nowrap">${escHtml(i.issue_type)}</span>` : ''}
+      </div>
+      <!-- 이슈 내용 -->
+      <div style="font-size:13px;line-height:1.7;color:var(--text);margin-bottom:12px;word-break:keep-all;white-space:pre-wrap">${escHtml(i.issue)}</div>
+      <!-- 하단: 등록자 + 해결자 -->
+      <div style="display:flex;gap:20px;flex-wrap:wrap;border-top:1px solid #F1F5F9;padding-top:8px">
+        <div style="font-size:11px;color:var(--muted)">
+          <span style="font-weight:600;color:var(--text)">📝 등록</span>
+          &nbsp;${escHtml(i.author_name || '')}
+          ${i.log_date ? `<span style="background:#F1F5F9;padding:1px 6px;border-radius:4px;margin-left:4px">${i.log_date}</span>` : ''}
+        </div>
+        ${isResolved
+          ? (() => {
+              const days = (i.issue_resolved_date && i.log_date)
+                ? Math.round((new Date(i.issue_resolved_date) - new Date(i.log_date)) / 86400000)
+                : null;
+              return `<div style="font-size:11px;color:#059669">
+               <span style="font-weight:600">✓ 해결</span>
+               &nbsp;${escHtml(i.issue_resolved_by || '')}
+               ${i.issue_resolved_date ? `<span style="background:#D1FAE5;padding:1px 6px;border-radius:4px;margin-left:4px">${i.issue_resolved_date}</span>` : ''}
+               ${days !== null ? `<span style="background:#F0FDF4;color:#059669;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:4px;border:1px solid #BBF7D0">${days === 0 ? '당일' : `+${days}일`}</span>` : ''}
+             </div>`;
+            })()
+          : `<div style="font-size:11px;color:#D97706;font-weight:600">⏳ 미해결</div>`}
+      </div>
     </div>`;
+  }).join('');
 }
 
 function renderIssueCharts() {
