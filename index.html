@@ -1149,7 +1149,11 @@ async function openEditLogModal(id, fromProjectId='', fromUnitId='') {
         <div id="edit-sub-item-group" style="display:none;margin-top:10px">
           <label style="font-size:12px;color:var(--muted);margin-bottom:6px">세부 항목 선택</label>
           <div id="edit-multi-checkbox-group" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
-          <button type="button" onclick="selectAllEditMulti()" style="padding:5px 10px;border-radius:7px;border:1.5px solid var(--primary);background:#fff;color:var(--primary);font-size:12px;font-weight:600;cursor:pointer">전체 선택</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+            <button type="button" onclick="selectAllEditMulti()" style="padding:5px 10px;border-radius:7px;border:1.5px solid var(--primary);background:#fff;color:var(--primary);font-size:12px;font-weight:600;cursor:pointer">전체 선택</button>
+            <button type="button" id="edit-partial-btn" onclick="setEditPartialMode(true)" style="display:none;padding:5px 10px;border-radius:7px;border:none;background:#F59E0B;color:#fff;font-size:12px;font-weight:600;cursor:pointer">⚡ 해당 항목만으로 완료 처리</button>
+          </div>
+          <p id="edit-multi-hint" style="font-size:11px;color:var(--muted)">※ 항목을 선택하면 완료 버튼이 나타납니다</p>
         </div>
       </div>
     </div>
@@ -1248,6 +1252,16 @@ function onEditMultiCheckChange(checkbox) {
     label.style.borderColor = 'var(--border)';
     label.style.background = '#fff';
   }
+  const checked = document.querySelectorAll('input[name="edit-sub-item"]:checked').length;
+  const total = document.querySelectorAll('input[name="edit-sub-item"]').length;
+  const partialBtn = document.getElementById('edit-partial-btn');
+  const hint = document.getElementById('edit-multi-hint');
+  if (partialBtn) partialBtn.style.display = (checked > 0 && checked < total) ? 'inline-block' : 'none';
+  if (hint) {
+    if (checked === 0) hint.textContent = '※ 항목을 선택하면 완료 버튼이 나타납니다';
+    else if (checked < total) hint.textContent = `※ ${checked}/${total}개 선택됨 — 설비에 불필요한 항목은 "해당 항목만으로 완료 처리"를 누르세요`;
+    else hint.textContent = `※ 전체 선택됨 — 저장 버튼으로 완료 처리하세요`;
+  }
 }
 
 function selectAllEditMulti() {
@@ -1257,7 +1271,42 @@ function selectAllEditMulti() {
     label.style.borderColor = 'var(--primary)';
     label.style.background = 'var(--primary-light)';
   });
+  const partialBtn = document.getElementById('edit-partial-btn');
+  if (partialBtn) partialBtn.style.display = 'none';
+  const hint = document.getElementById('edit-multi-hint');
+  const total = document.querySelectorAll('input[name="edit-sub-item"]').length;
+  if (hint) hint.textContent = `※ 전체 선택됨(${total}개) — 저장 버튼으로 완료 처리하세요`;
 }
+
+function setEditPartialMode(confirm_needed) {
+  const checked = [...document.querySelectorAll('input[name="edit-sub-item"]:checked')];
+  const total = document.querySelectorAll('input[name="edit-sub-item"]').length;
+  if (!checked.length) return;
+  const selectedItems = checked.map(cb => cb.value.split('::')[1]).join(', ');
+  if (confirm_needed) {
+    const ok = window.confirm(
+      `⚡ 해당 항목만으로 완료 처리\n\n` +
+      `선택된 항목 (${checked.length}/${total}개): ${selectedItems}\n\n` +
+      `이 설비는 위 항목만 적용되므로 5단계를 완료 처리합니다.\n계속하시겠습니까?`
+    );
+    if (!ok) return;
+  }
+  // 저장 버튼 클릭 트리거 (partial 플래그 전달)
+  const saveBtn = document.querySelector('.modal-box .btn-primary[onclick*="saveEditLog"]');
+  if (saveBtn) {
+    // partial 모드 플래그를 hidden input으로 전달
+    let flag = document.getElementById('edit-partial-flag');
+    if (!flag) {
+      flag = document.createElement('input');
+      flag.type = 'hidden';
+      flag.id = 'edit-partial-flag';
+      document.querySelector('.modal-box').appendChild(flag);
+    }
+    flag.value = 'partial';
+    saveBtn.click();
+  }
+}
+
 
 async function saveEditLog(id, fromProjectId='', fromUnitId='') {
   const date = document.getElementById('edit-log-date').value;
@@ -1267,6 +1316,11 @@ async function saveEditLog(id, fromProjectId='', fromUnitId='') {
   const content = document.getElementById('edit-log-content').value.trim();
   const issueType = document.getElementById('edit-log-issue-type').value;
   const issue = document.getElementById('edit-log-issue').value.trim();
+
+  // partial 모드 플래그 확인 후 초기화
+  const partialFlag = document.getElementById('edit-partial-flag');
+  const isPartial = partialFlag?.value === 'partial';
+  if (partialFlag) partialFlag.value = '';
 
   if (!content) {
     const msg = document.getElementById('edit-log-msg');
@@ -1279,6 +1333,8 @@ async function saveEditLog(id, fromProjectId='', fromUnitId='') {
   if (stage === 5) {
     const subStageId = document.getElementById('edit-log-sub-stage')?.value || subStage;
     const checkedItems = [...document.querySelectorAll('input[name="edit-sub-item"]:checked')];
+    const totalItems = document.querySelectorAll('input[name="edit-sub-item"]').length;
+    const modeLabel = (isPartial || (checkedItems.length > 0 && checkedItems.length < totalItems)) ? '[부분완료]' : '[완료]';
 
     // 현재 행 업데이트 (첫 번째 체크 항목 또는 sub_stage)
     const firstVal = checkedItems.length > 0 ? checkedItems[0].value : subStageId;
@@ -1299,6 +1355,21 @@ async function saveEditLog(id, fromProjectId='', fromUnitId='') {
           issue, issue_type: issueType, unit_id: unitId,
         }));
         await sb.from('work_logs').insert(extraRows);
+      }
+    }
+
+    // 완료 확정 행 insert (sub_stage = '5-1' 또는 '5-2', 진척률 반영용)
+    if (!saveError && subStageId && checkedItems.length > 0) {
+      const selectedItems = checkedItems.map(cb => cb.value.split('::')[1]).join(', ');
+      const {data: origLog2} = await sb.from('work_logs').select('project_id').eq('id',id).single();
+      if (origLog2) {
+        await sb.from('work_logs').insert({
+          project_id: origLog2.project_id, user_id: currentUser.id,
+          author_name: currentUserName,
+          content: `${modeLabel} ${subStageId} (${selectedItems})`,
+          log_date: date, stage: 5, sub_stage: subStageId,
+          issue: '', issue_type: '', unit_id: unitId,
+        });
       }
     }
   } else {
