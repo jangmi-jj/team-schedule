@@ -528,16 +528,29 @@ function renderTable(fabMap){
         const overdueUnits=units.filter(u=>u.maxStage<s&&allTargets.find(t=>t.unit_id===u.id&&t.stage===s&&isOverdue(t.target_date))).length;
         if(earliestDate){
           const ds=getDateStatus(earliestDate);
-          const dateColor=ds==='overdue'?'#EF4444':ds==='near'?'#D97706':'#6366F1';
-          const nearAnim=ds==='near'?'animation:blink-warn 1.2s ease-in-out infinite':'';
-          const prefix=ds==='overdue'?'⚠️ ':ds==='near'?'🔥 ':'';
-          row2=`<div style="font-size:10px;font-weight:700;margin-top:2px;color:${dateColor};${nearAnim}">${prefix}목표 ${formatDate(earliestDate)}${overdueUnits>0?` <span style="background:#FEE2E2;padding:1px 4px;border-radius:3px">D+초과 ${overdueUnits}대</span>`:''}</div>`;
+          const overdue=ds==='overdue';
+          const near=ds==='near';
+          const dateColor=overdue?'#EF4444':near?'#D97706':'#6366F1';
+          const labelText=overdue?'⚠️ 목표일 초과':near?'🔥 마감 임박':'목표';
+          const labelColor=overdue?'#EF4444':near?'#B45309':'#6366F1';
+          const labelWeight=overdue||near?'700':'600';
+          const dateStyle=near?'animation:blink-warn 1.2s ease-in-out infinite':'';
+          row2=`<div style="font-size:10px;color:${labelColor};font-weight:${labelWeight};margin-top:2px">${labelText}</div>
+                <div style="font-size:11px;font-weight:700;color:${dateColor};${dateStyle}">${formatDate(earliestDate)}${overdueUnits>0?` <span style="background:#FEE2E2;padding:1px 4px;border-radius:3px;font-size:10px">초과 ${overdueUnits}대</span>`:''}</div>`;
         } else {
           row2=`<div style="font-size:10px;color:#CBD5E1;margin-top:2px">목표 미설정</div>`;
         }
       }
 
-      stageCells+=`<td style="background:${bg};vertical-align:middle">
+      // 셀 배경: 완료여부 + 날짜상태 반영
+      const fabCellDateStatus=earliestDate?getDateStatus(earliestDate):'none';
+      const fabCellBorder=fabCellDateStatus==='overdue'?';border:1px solid #FECACA':fabCellDateStatus==='near'?';border:1px solid #FCD34D':'';
+      const fabCellBg=allDone?'#D1FAE5'
+        :fabCellDateStatus==='overdue'?'#FFF1F2'
+        :fabCellDateStatus==='near'?'#FFFBEB'
+        :done>0?'#FEF9C3':'#fff';
+
+      stageCells+=`<td style="background:${fabCellBg}${fabCellBorder};vertical-align:middle">
         ${row1}${row2}
       </td>`;
 
