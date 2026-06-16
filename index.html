@@ -2295,7 +2295,8 @@ async function loadUnresolvedIssues() {
             <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${log.projects?.color}20;color:${log.projects?.color}">${escHtml(log.projects?.name||'')}</span>
             <span style="font-size:11px;color:var(--muted)">${log.log_date} · ${escHtml(log.author_name||'')}</span>
           </div>
-          <div style="font-size:13px;color:#D97706;font-weight:600;margin-bottom:2px">⚠️ ${escHtmlBr(log.issue)}</div>
+          <div style="font-size:11px;font-weight:700;color:#D97706;margin-bottom:2px">⚠️ 발생 내용</div>
+          <div style="font-size:13px;color:#D97706;font-weight:600;margin-bottom:2px">${escHtmlBr(log.issue)}</div>
           ${log.equipment?`<div style="font-size:11px;color:var(--muted)">📍 ${escHtml(log.equipment)}</div>`:''}
         </div>
         <button onclick="resolveIssue('${log.id}')"
@@ -2307,31 +2308,42 @@ async function loadUnresolvedIssues() {
 }
 
 function resolveIssue(id) {
-  // 확인 팝업
   const modal = document.getElementById('confirm-modal');
   modal.querySelector('.modal-box').innerHTML = `
-    <div style="text-align:center;padding:8px 0 16px">
-      <div style="font-size:36px;margin-bottom:10px">✅</div>
-      <h3 style="font-size:16px;font-weight:700;margin-bottom:8px">이슈 해결 완료 처리</h3>
-      <p style="font-size:13px;color:var(--muted);line-height:1.6">
-        이 이슈를 해결 완료로 처리할까요?<br>
-        처리 후에는 미해결 목록에서 사라져요.
-      </p>
+    <div style="padding:4px 0 14px">
+      <div style="font-size:28px;margin-bottom:8px">✅</div>
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:6px">이슈 해결 완료 처리</h3>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px">해결 내용을 기록해 주세요.</p>
+      <div style="text-align:left;margin-bottom:14px">
+        <label style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;display:block">해결 내용 <span style="font-weight:400;color:var(--muted)">(필수)</span></label>
+        <textarea id="resolve-note-input" placeholder="어떻게 해결했는지 상세히 입력해 주세요" style="width:100%;min-height:90px;font-size:13px;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;resize:vertical;outline:none"
+          oninput="document.getElementById('resolve-submit-btn').disabled=!this.value.trim()"></textarea>
+        <p id="resolve-note-error" style="font-size:12px;color:var(--danger);margin-top:4px;display:none">해결 내용을 입력해 주세요.</p>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal()">취소</button>
-      <button class="btn btn-primary" onclick="confirmResolveIssue('${id}')" style="background:#10B981">✓ 해결 완료</button>
+      <button id="resolve-submit-btn" class="btn btn-primary" onclick="confirmResolveIssue('${id}')" style="background:#10B981" disabled>✓ 해결 완료</button>
     </div>`;
   modal.classList.remove('hidden');
+  setTimeout(()=>document.getElementById('resolve-note-input')?.focus(), 100);
 }
 
 async function confirmResolveIssue(id) {
+  const noteEl = document.getElementById('resolve-note-input');
+  const resolveNote = noteEl ? noteEl.value.trim() : '';
+  if (!resolveNote) {
+    const errEl = document.getElementById('resolve-note-error');
+    if (errEl) errEl.style.display = 'block';
+    return;
+  }
   closeModal();
   const today = new Date().toISOString().slice(0,10);
   await sb.from('work_logs').update({
     issue_resolved: true,
     issue_resolved_by: currentUserName || '',
     issue_resolved_date: today,
+    issue_resolve_note: resolveNote,
   }).eq('id', id);
   await fetchCalendarData();
   renderCalendar();
@@ -2831,7 +2843,7 @@ async function loadIssuesTab() {
 
 async function fetchAllIssues() {
   const {data} = await sb.from('work_logs')
-    .select('*, projects(name), equipment_units(name,fab,location)')
+    .select('*, projects(name), equipment_units(name,fab,location), issue_resolve_note')
     .not('issue','is',null)
     .neq('issue','')
     .order('created_at',{ascending:false});
@@ -2899,7 +2911,8 @@ function filterIssues() {
                &nbsp;${escHtml(i.issue_resolved_by || '')}
                ${i.issue_resolved_date ? `<span style="background:#D1FAE5;padding:1px 6px;border-radius:4px;margin-left:4px">${i.issue_resolved_date}</span>` : ''}
                ${days !== null ? `<span style="background:#F0FDF4;color:#059669;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:4px;border:1px solid #BBF7D0">${days === 0 ? '당일' : `+${days}일`}</span>` : ''}
-             </div>`;
+             </div>
+             ${i.issue_resolve_note ? `<div style="margin-top:8px;font-size:12px;color:#065F46;background:#D1FAE5;border-left:3px solid #10B981;padding:8px 10px;border-radius:0 8px 8px 0;line-height:1.6;white-space:pre-wrap;word-break:keep-all">💬 ${escHtml(i.issue_resolve_note)}</div>` : ''}`;
             })()
           : `<div style="font-size:11px;color:#D97706;font-weight:600">⏳ 미해결</div>`}
       </div>
