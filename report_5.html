@@ -72,6 +72,9 @@
     tbody td.td-left { text-align: left; padding-left: 12px; }
     tbody tr.unit-row { background: #FAFAFA; }
     tbody tr.unit-row td { font-size: 11px; }
+    tbody tr.unit-row.unit-issue { background: #FFF5F5; }
+    tbody tr.unit-row.unit-issue td { border-color: #FECACA; }
+    tbody tr.unit-row.unit-issue:hover { background: #FEE2E2; }
     tbody tr.total-row { background: #F0FDF4; font-weight: 700; }
 
     .signal { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 700; border: none; background: none; }
@@ -86,6 +89,10 @@
     .cancel-btn { background: none; border: 1px solid var(--border); border-radius: 5px; cursor: pointer; font-size: 10px; padding: 3px 7px; color: var(--muted); }
     .loading { text-align: center; padding: 40px; color: var(--muted); font-size: 13px; }
 
+    @keyframes blink-warn {
+      0%,100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
     @media print {
       .app-header .header-right, .fab-manage, .lock-banner .btn, .edit-btn, .save-btn, .cancel-btn { display: none !important; }
     }
@@ -173,7 +180,7 @@ const SUB_STAGES = {
 };
 
 let sb, currentUser = null;
-let allUnits=[], allLogs=[], allSubLogs=[], allTargets=[], allFabStatus={};
+let allUnits=[], allLogs=[], allSubLogs=[], allTargets=[], allFabStatus={}, allUnitNotes={};
 let expandedFabs = new Set();
 let expandedStages = new Set(); // 세부단계 펼침
 let visibleFabs = new Set();    // 관리자 설정 표시 FAB
@@ -184,6 +191,8 @@ function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt
 function getProgressColor(p){if(p===0)return'#94A3B8';if(p<=25)return'#3B82F6';if(p<=55)return'#F59E0B';if(p<100)return'#8B5CF6';return'#10B981';}
 function formatDate(d){if(!d)return'';const dt=new Date(d+'T00:00:00');return`${dt.getMonth()+1}/${dt.getDate()}`;}
 function isOverdue(dateStr){if(!dateStr)return false;const today=new Date();today.setHours(0,0,0,0);return new Date(dateStr+'T00:00:00')<today;}
+function isNearDeadline(dateStr){if(!dateStr)return false;const today=new Date();today.setHours(0,0,0,0);const target=new Date(dateStr+'T00:00:00');const diff=Math.ceil((target-today)/(1000*60*60*24));return diff>=0&&diff<=3;}
+function getDateStatus(dateStr){if(!dateStr)return'none';if(isOverdue(dateStr))return'overdue';if(isNearDeadline(dateStr))return'near';return'ok';}
 
 // ── URL 파라미터 ──
 function getUrlFabs(){
@@ -250,12 +259,13 @@ function updateAuthUI(){
 
 // ── 데이터 로드 ──
 async function loadAll(){
-  const [{data:units},{data:logs},{data:subLogs},{data:targets},{data:fabList}] = await Promise.all([
+  const [{data:units},{data:logs},{data:subLogs},{data:targets},{data:fabList},{data:unitNotes}] = await Promise.all([
     sb.from('equipment_units').select('*').order('created_at'),
     sb.from('work_logs').select('unit_id,stage').not('unit_id','is',null).gt('stage',0),
     sb.from('work_logs').select('unit_id,stage,sub_stage').not('unit_id','is',null).not('sub_stage','is',null),
     sb.from('fab_targets').select('*'),
     sb.from('fab_status').select('*'),
+    sb.from('unit_notes').select('*'),
   ]);
   allUnits=units||[];
   allLogs=logs||[];
@@ -263,6 +273,8 @@ async function loadAll(){
   allTargets=targets||[];
   allFabStatus={};
   (fabList||[]).forEach(f=>{allFabStatus[f.fab]=f;});
+  allUnitNotes={};
+  (unitNotes||[]).forEach(n=>{allUnitNotes[n.unit_id]=n;});
   // hidden_units 파싱 (fab_status에 JSON으로 저장)
   visibleUnits = new Set();
   (fabList||[]).forEach(f=>{
@@ -322,7 +334,7 @@ function buildFabMap(){
       const subs=SUB_STAGES[s]||[];
       if(!subs.length)return;
       if(s===5){
-        // 5단계: '5-1','5-2' 완료 확정 행 ([완료] 또는 [부분완료]) 또는 sub_stage가 정확히 '5-1'/'5-2'인 행만 완료로 인정
+        // 5단계: '5-1','5-2' 완료 확정 행만 완료로 인정
         subs.forEach(sub=>{if(recorded.has(sub.id))eff.add(sub.id);});
       } else {
         // 그 외: sub_stage 기록 없으면 전부 완료, 있으면 기록된 것만
@@ -462,13 +474,15 @@ function renderSummary(fabMap){
   const total=shownUnits.length;
   const avgPct=total>0?Math.round(shownUnits.reduce((s,u)=>s+(STAGE_PROGRESS[u.maxStage]||0),0)/total):0;
   const completed=shownUnits.filter(u=>u.maxStage>=9).length;
-  const redFabs=shownFabs.filter(f=>(allFabStatus[f]?.status||'green')==='red').length;
+  const redFabs=shownFabs.filter(f=>(fabMap[f]||[]).some(u=>allUnitNotes[u.id]?.has_issue)).length;
+  const redUnits=shownUnits.filter(u=>allUnitNotes[u.id]?.has_issue).length;
   document.getElementById('summary-cards').innerHTML=`
     <div class="summary-card"><div class="num" style="color:#4F46E5">${shownFabs.length}</div><div class="lbl">표시 FAB</div></div>
     <div class="summary-card"><div class="num" style="color:#64748B">${total}</div><div class="lbl">전체 설비</div></div>
     <div class="summary-card"><div class="num" style="color:${getProgressColor(avgPct)}">${avgPct}%</div><div class="lbl">평균 진행률</div></div>
     <div class="summary-card"><div class="num" style="color:#10B981">${completed}</div><div class="lbl">완료 설비</div></div>
-    <div class="summary-card"><div class="num" style="color:#EF4444">${redFabs}</div><div class="lbl">특이사항 FAB</div></div>`;
+    <div class="summary-card"><div class="num" style="color:#EF4444">${redFabs}</div><div class="lbl">특이사항 FAB</div></div>
+    <div class="summary-card"><div class="num" style="color:#EF4444">${redUnits}</div><div class="lbl">특이사항 호기</div></div>`;
 }
 
 // ── 메인 테이블 렌더링 ──
@@ -486,7 +500,6 @@ function renderTable(fabMap){
     const total=units.length;
     const avgPct=Math.round(units.reduce((s,u)=>s+(STAGE_PROGRESS[u.maxStage]||0),0)/total);
     const color=getProgressColor(avgPct);
-    const status=allFabStatus[fab]?.status||'green';
     const note=allFabStatus[fab]?.note||'';
     const isExp=expandedFabs.has(fab);
     const fabKey=fab.replace(/[^a-zA-Z0-9가-힣]/g,'_');
@@ -535,10 +548,10 @@ function renderTable(fabMap){
       }
     }
 
-    // 신호등
-    const sigHtml=currentUser
-      ?`<button class="signal signal-${status} clickable" onclick="event.stopPropagation();toggleStatus('${fab}')">${status==='green'?'🟢 정상':'🔴 특이'}</button>`
-      :`<span class="signal signal-${status}">${status==='green'?'🟢 정상':'🔴 특이'}</span>`;
+    // 신호등 - 호기 특이사항 자동 연동
+    const hasUnitIssue=units.some(u=>allUnitNotes[u.id]?.has_issue);
+    const status=hasUnitIssue?'red':'green';
+    const sigHtml=`<span class="signal signal-${status}">${status==='green'?'🟢 정상':'🔴 특이'}</span>`;
 
     // 비고
     const noteHtml=currentUser
@@ -552,7 +565,7 @@ function renderTable(fabMap){
         </div>`
       :`<div style="font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all">${escHtml(note)||'<span style="color:#CBD5E1">—</span>'}</div>`;
 
-    rows+=`<tr class="fab-row ${status==='red'?'status-red':''}" onclick="toggleFab('${fab}')">
+    rows+=`<tr class="fab-row ${hasUnitIssue?'status-red':''}" onclick="toggleFab('${fab}')">
       <td class="td-left"><div style="display:flex;align-items:center;gap:6px">
         <div style="width:9px;height:9px;border-radius:50%;background:${color};flex-shrink:0"></div>
         <span style="font-weight:700">${escHtml(fab)}</span>
@@ -580,14 +593,25 @@ function renderTable(fabMap){
             uStageCells+=`<td style="background:#D1FAE5;color:#065F46;font-size:12px;font-weight:700">✓</td>`;
           } else {
             // 미완료 단계: 목표일 입력/표시
-            const overdue=t?.target_date&&isOverdue(t.target_date);
-            const cellBg=overdue?'#FFF1F2':'#F8FAFF';
-            const dateColor=overdue?'#EF4444':t?.target_date?'#4F46E5':'#CBD5E1';
+            const dateStatus=getDateStatus(t?.target_date);
+            const overdue=dateStatus==='overdue';
+            const near=dateStatus==='near';
+            // 셀 배경/테두리
+            const cellBg=overdue?'#FFF1F2':near?'#FFFBEB':'#F8FAFF';
+            const cellBorder=overdue?';border:1px solid #FECACA':near?';border:1px solid #FCD34D':'';
+            // 날짜 텍스트 색
+            const dateColor=overdue?'#EF4444':near?'#D97706':t?.target_date?'#4F46E5':'#CBD5E1';
+            // 라벨 텍스트/색
+            const labelText=overdue?'⚠️ 목표일 초과':near?'🔥 마감 임박':'목표일';
+            const labelColor=overdue?'#EF4444':near?'#B45309':'var(--muted)';
+            const labelWeight=overdue||near?'700':'400';
+            // near 깜빡임 애니메이션 (인라인 keyframes은 안 되므로 클래스 방식)
+            const dateStyle=near?'animation:blink-warn 1.2s ease-in-out infinite':'';
             if(currentUser){
-              uStageCells+=`<td style="background:${cellBg}${overdue?';border:1px solid #FECACA':''}" onclick="event.stopPropagation()">
+              uStageCells+=`<td style="background:${cellBg}${cellBorder}" onclick="event.stopPropagation()">
                 <div id="tv-${u.id}-${s}">
-                  <div style="font-size:10px;color:${overdue?'#EF4444':'var(--muted)'};margin-bottom:1px;font-weight:${overdue?'700':'400'}">${overdue?'⚠️ 목표일 초과':'목표일'}</div>
-                  <div style="font-size:11px;font-weight:700;color:${dateColor}">${t?.target_date?formatDate(t.target_date):'미설정'}</div>
+                  <div style="font-size:10px;color:${labelColor};margin-bottom:1px;font-weight:${labelWeight}">${labelText}</div>
+                  <div style="font-size:11px;font-weight:700;color:${dateColor};${dateStyle}">${t?.target_date?formatDate(t.target_date):'미설정'}</div>
                   <button class="edit-btn" onclick="startTarget('${u.id}',${s})" style="margin-top:2px">✏️</button>
                 </div>
                 <div id="te-${u.id}-${s}" style="display:none">
@@ -596,9 +620,9 @@ function renderTable(fabMap){
                 </div>
               </td>`;
             } else {
-              uStageCells+=`<td style="background:${cellBg}${overdue?';border:1px solid #FECACA':''}">
-                <div style="font-size:10px;color:${overdue?'#EF4444':'var(--muted)'};margin-bottom:1px;font-weight:${overdue?'700':'400'}">${overdue?'⚠️ 목표일 초과':'목표일'}</div>
-                <div style="font-size:11px;font-weight:700;color:${dateColor}">${t?.target_date?formatDate(t.target_date):'—'}</div>
+              uStageCells+=`<td style="background:${cellBg}${cellBorder}">
+                <div style="font-size:10px;color:${labelColor};margin-bottom:1px;font-weight:${labelWeight}">${labelText}</div>
+                <div style="font-size:11px;font-weight:700;color:${dateColor};${dateStyle}">${t?.target_date?formatDate(t.target_date):'—'}</div>
               </td>`;
             }
           }
@@ -610,16 +634,41 @@ function renderTable(fabMap){
             });
           }
         }
-        rows+=`<tr class="unit-row">
+        const uNote=allUnitNotes[u.id];
+        const uHasIssue=uNote?.has_issue||false;
+        const uNoteText=uNote?.note||'';
+        const uKey=String(u.id).replace(/[^a-zA-Z0-9]/g,'_');
+
+        // 호기 비고 셀
+        const uNoteHtml=currentUser
+          ?`<div id="unv-${uKey}" style="min-width:120px">
+              ${uHasIssue?'<span style="display:inline-block;background:#FEE2E2;color:#991B1B;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-bottom:3px">⚠️ 특이사항</span>':''}
+              <div style="font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all;margin-bottom:3px">${escHtml(uNoteText)||'<span style="color:#CBD5E1">—</span>'}</div>
+              <button class="edit-btn" onclick="event.stopPropagation();startUnitNote('${u.id}')">✏️ 편집</button>
+            </div>
+            <div id="une-${uKey}" style="display:none;min-width:150px" onclick="event.stopPropagation()">
+              <label style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;margin-bottom:5px;cursor:pointer;color:${uHasIssue?'#EF4444':'var(--text)'}">
+                <input type="checkbox" id="uci-${uKey}" ${uHasIssue?'checked':''} onchange="document.getElementById('uci-label-${uKey}').style.color=this.checked?'#EF4444':'var(--text)'" style="width:14px;height:14px;cursor:pointer;accent-color:#EF4444" />
+                <span id="uci-label-${uKey}" style="color:${uHasIssue?'#EF4444':'var(--text)'}">특이사항 발생</span>
+              </label>
+              <textarea id="uni-${uKey}" style="font-size:11px;min-height:48px;width:100%;margin-bottom:3px">${escHtml(uNoteText)}</textarea>
+              <div style="display:flex;gap:4px"><button class="save-btn" onclick="saveUnitNote('${u.id}')">저장</button><button class="cancel-btn" onclick="cancelUnitNote('${u.id}')">취소</button></div>
+            </div>`
+          :`<div style="min-width:100px">
+              ${uHasIssue?'<span style="display:inline-block;background:#FEE2E2;color:#991B1B;font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;margin-bottom:3px">⚠️ 특이사항</span>':''}
+              <div style="font-size:11px;line-height:1.5;white-space:pre-wrap;word-break:break-all">${escHtml(uNoteText)||'<span style="color:#CBD5E1">—</span>'}</div>
+            </div>`;
+
+        rows+=`<tr class="unit-row${uHasIssue?' unit-issue':''}">
           <td class="td-left" style="padding-left:24px">
             <div style="font-size:11px;font-weight:700;color:${uColor}">${escHtml(u.name)}</div>
             ${u.location?`<div style="font-size:10px;color:var(--muted)">${escHtml(u.location)}</div>`:''}
           </td>
-          <td></td>
+          <td>${uHasIssue?'<span class="signal signal-red" style="font-size:10px">🔴 특이</span>':'<span class="signal signal-green" style="font-size:10px">🟢 정상</span>'}</td>
           <td><div style="font-size:11px;font-weight:700;color:${uColor}">${uPct}%</div><div class="pct-bar"><div class="pct-fill" style="width:${uPct}%;background:${uColor}"></div></div></td>
           <td></td>
           ${uStageCells}
-          <td></td>
+          <td style="text-align:left" onclick="event.stopPropagation()">${uNoteHtml}</td>
         </tr>`;
       });
     }
@@ -680,12 +729,16 @@ function unlockUrl(){
 // ── 이벤트 핸들러 ──
 function toggleFab(fab){if(expandedFabs.has(fab))expandedFabs.delete(fab);else expandedFabs.add(fab);renderAll();}
 
-async function toggleStatus(fab){
+// 호기 비고 핸들러
+function startUnitNote(uid){const k=String(uid).replace(/[^a-zA-Z0-9]/g,'_');document.getElementById('unv-'+k).style.display='none';document.getElementById('une-'+k).style.display='block';}
+function cancelUnitNote(uid){const k=String(uid).replace(/[^a-zA-Z0-9]/g,'_');document.getElementById('unv-'+k).style.display='block';document.getElementById('une-'+k).style.display='none';}
+async function saveUnitNote(uid){
   if(!currentUser)return;
-  const cur=allFabStatus[fab]?.status||'green';
-  const next=cur==='green'?'red':'green';
-  const {error}=await sb.from('fab_status').upsert({...(allFabStatus[fab]||{}),fab,status:next,updated_at:new Date().toISOString()},{onConflict:'fab'});
-  if(!error){allFabStatus[fab]={...(allFabStatus[fab]||{}),fab,status:next};renderAll();}
+  const k=String(uid).replace(/[^a-zA-Z0-9]/g,'_');
+  const note=document.getElementById('uni-'+k).value.trim();
+  const has_issue=document.getElementById('uci-'+k).checked;
+  const {error}=await sb.from('unit_notes').upsert({unit_id:uid,note,has_issue,updated_at:new Date().toISOString()},{onConflict:'unit_id'});
+  if(!error){allUnitNotes[uid]={unit_id:uid,note,has_issue};renderAll();}
 }
 
 function startNote(fab){const k=fab.replace(/[^a-zA-Z0-9가-힣]/g,'_');document.getElementById('nv-'+k).style.display='none';document.getElementById('ne-'+k).style.display='block';}
