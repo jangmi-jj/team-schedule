@@ -571,7 +571,7 @@ function renderTable(fabMap){
       // 세부단계 컬럼
       if(expandedStages.has(s)){
         (SUB_STAGES[s]||[]).forEach(sub=>{
-          const subDone=units.filter(u=>u.subStages&&u.subStages.has(sub.id)).length;
+          const subDone=shownUnits.filter(u=>u.subStages&&u.subStages.has(sub.id)).length;
           const subBg=subDone===total?'#D1FAE5':subDone>0?'#EDE9FE':'#FAFAFA';
           stageCells+=`<td style="background:${subBg};border:1px solid #C4B5FD">
             ${subDone>0?`<div style="font-size:11px;font-weight:700;color:#6D28D9">${subDone}/${total}</div>`:'<span style="color:#DDD6FE">—</span>'}
@@ -580,8 +580,8 @@ function renderTable(fabMap){
       }
     }
 
-    // 신호등 - 호기 특이사항 자동 연동
-    const hasUnitIssue=units.some(u=>allUnitNotes[u.id]?.has_issue);
+    // 신호등 - 표시 호기 특이사항 자동 연동
+    const hasUnitIssue=shownUnits.some(u=>allUnitNotes[u.id]?.has_issue);
     const status=hasUnitIssue?'red':'green';
     const sigHtml=`<span class="signal signal-${status}">${status==='green'?'🟢 정상':'🔴 특이'}</span>`;
 
