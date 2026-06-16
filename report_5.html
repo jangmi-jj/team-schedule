@@ -479,7 +479,7 @@ function renderFabManagePanel(fabMap){
 // ── 요약 카드 ──
 function renderSummary(fabMap){
   const shownFabs=Object.keys(fabMap).filter(f=>visibleFabs.has(f));
-  const shownUnits=shownFabs.flatMap(f=>fabMap[f]);
+  const shownUnits=shownFabs.flatMap(f=>fabMap[f]).filter(u=>!(visibleUnits&&visibleUnits.has(u.id)));
   const total=shownUnits.length;
   const avgPct=total>0?Math.round(shownUnits.reduce((s,u)=>s+(stagePct(u.id)),0)/total):0;
   const completed=shownUnits.filter(u=>u.maxStage>=9).length;
@@ -506,23 +506,25 @@ function renderTable(fabMap){
 
   fabs.forEach(fab=>{
     const units=fabMap[fab];
-    const total=units.length;
-    const avgPct=Math.round(units.reduce((s,u)=>s+(stagePct(u.id)),0)/total);
+    // 표시 호기만 (숨김 제외)
+    const shownUnits=units.filter(u=>!(visibleUnits&&visibleUnits.has(u.id)));
+    const total=shownUnits.length||1;
+    const avgPct=Math.round(shownUnits.reduce((s,u)=>s+(stagePct(u.id)),0)/total);
     const color=getProgressColor(avgPct);
     const note=allFabStatus[fab]?.note||'';
     const isExp=expandedFabs.has(fab);
     const fabKey=fab.replace(/[^a-zA-Z0-9가-힣]/g,'_');
 
-    // 단계별 셀 (2단: 1단=완료수/전체수 or 체크, 2단=목표일)
+    // 단계별 셀 (표시 호기 기준)
     let stageCells='';
     for(let s=1;s<=9;s++){
-      const done=units.filter(u=>completedStagesByUnit[u.id]?.has(s)).length;
+      const done=shownUnits.filter(u=>completedStagesByUnit[u.id]?.has(s)).length;
       const allDone=done===total;
-      const hasLog=units.filter(u=>u.maxStage>=s).length; // 로그 있는 호기 수 (진행중 판단용)
+      const hasLog=shownUnits.filter(u=>u.maxStage>=s).length;
       const bg=allDone?'#D1FAE5':done>0?'#FEF9C3':hasLog>0?'#FFFDE7':'#fff';
 
-      // 미완료(stage_completions 기준) 호기들의 목표일 중 가장 빠른 날짜
-      const stageDates=units
+      // 미완료(stage_completions 기준) 표시 호기들의 목표일 중 가장 빠른 날짜
+      const stageDates=shownUnits
         .filter(u=>!completedStagesByUnit[u.id]?.has(s))
         .map(u=>{ const t=allTargets.find(t=>t.unit_id===u.id&&t.stage===s); return t?.target_date||null; })
         .filter(Boolean)
@@ -534,10 +536,9 @@ function renderTable(fabMap){
         row1=`<span style="color:#059669;font-size:16px">✓</span>`;
         row2='';
       } else {
-        const notDoneUnits=units.filter(u=>!completedStagesByUnit[u.id]?.has(s));
+        const notDoneUnits=shownUnits.filter(u=>!completedStagesByUnit[u.id]?.has(s));
         const overdueUnits=notDoneUnits.filter(u=>allTargets.find(t=>t.unit_id===u.id&&t.stage===s&&isOverdue(t.target_date))).length;
-        // 진행중(로그O, 완료X) 호기 수
-        const inProgressUnits=units.filter(u=>u.maxStage>=s&&!completedStagesByUnit[u.id]?.has(s)).length;
+        const inProgressUnits=shownUnits.filter(u=>u.maxStage>=s&&!completedStagesByUnit[u.id]?.has(s)).length;
         row1=`<span style="font-weight:700;font-size:12px">${done}/${total}</span>${inProgressUnits>0?`<span style="font-size:9px;color:#D97706;display:block">⏳${inProgressUnits}진행중</span>`:''}`;
         if(earliestDate){
           const ds=getDateStatus(earliestDate);
@@ -730,19 +731,20 @@ function renderTable(fabMap){
     }
   });
 
-  // 전체 합계
-  const totalCount=allShownUnits.length;
+  // 전체 합계 (표시 호기만)
+  const allShownUnitsFiltered=allShownUnits.filter(u=>!(visibleUnits&&visibleUnits.has(u.id)));
+  const totalCount=allShownUnitsFiltered.length;
   if(totalCount>0){
-    const totalAvg=Math.round(allShownUnits.reduce((s,u)=>s+(stagePct(u.id)),0)/totalCount);
+    const totalAvg=Math.round(allShownUnitsFiltered.reduce((s,u)=>s+(stagePct(u.id)),0)/totalCount);
     const totalColor=getProgressColor(totalAvg);
     let totalStageCells='';
     for(let s=1;s<=9;s++){
-      const done=allShownUnits.filter(u=>u.maxStage>=s).length;
+      const done=allShownUnitsFiltered.filter(u=>completedStagesByUnit[u.id]?.has(s)).length;
       const bg=done===totalCount?'#D1FAE5':done>0?'#FEF9C3':'#fff';
       totalStageCells+=`<td style="background:${bg}">${done>0?`<b>${done}/${totalCount}</b>`:'—'}</td>`;
       if(expandedStages.has(s)){
         (SUB_STAGES[s]||[]).forEach(sub=>{
-          const subDone=allShownUnits.filter(u=>u.subStages&&u.subStages.has(sub.id)).length;
+          const subDone=allShownUnitsFiltered.filter(u=>u.subStages&&u.subStages.has(sub.id)).length;
           const subBg=subDone===totalCount?'#D1FAE5':subDone>0?'#EDE9FE':'#FAFAFA';
           totalStageCells+=`<td style="background:${subBg};border:1px solid #C4B5FD">${subDone>0?`<b style="color:#6D28D9">${subDone}/${totalCount}</b>`:'—'}</td>`;
         });
