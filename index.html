@@ -252,6 +252,16 @@
           <div class="progress-bar-wrap"><div class="progress-bar-fill" id="progress-bar" style="width:0%"></div></div>
           <div class="progress-label" id="progress-label"></div>
         </div>
+        <div id="stage-complete-group" style="display:none;margin-top:10px">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 12px;background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:10px;user-select:none"
+            id="stage-complete-label">
+            <input type="checkbox" id="log-stage-complete" style="width:16px;height:16px;cursor:pointer;accent-color:#10B981"
+              onchange="document.getElementById('stage-complete-label').style.background=this.checked?'#D1FAE5':'#F0FDF4';
+                        document.getElementById('stage-complete-label').style.borderColor=this.checked?'#10B981':'#BBF7D0';" />
+            <span style="font-size:13px;font-weight:700;color:#065F46">✅ 이 단계 완료</span>
+            <span style="font-size:11px;color:#059669;font-weight:400">체크하면 진행률에 이 단계까지 반영돼요</span>
+          </label>
+        </div>
       </div>
       <div class="form-group">
         <label>작업 내용</label>
@@ -526,6 +536,25 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 
 // 단계별 진척률
 const STAGE_PROGRESS = [0, 0, 10, 25, 35, 45, 55, 70, 90, 100];
+
+// 호기별 완료된 단계 집합 { unit_id: Set([1,3,5,...]) }
+let completedStagesByUnit = {};
+
+// 진행률 = 완료된 단계 중 최고값 기준
+function getCompletedMaxStage(unitId) {
+  const s = completedStagesByUnit[unitId];
+  if (!s || s.size === 0) return 0;
+  return Math.max(...s);
+}
+function stagePct(unitId) {
+  return STAGE_PROGRESS[getCompletedMaxStage(unitId)] || 0;
+}
+// 방안 A fallback용 (stage_completions 없는 호기 대비)
+function stagePctByMax(maxStage) {
+  if (!maxStage || maxStage <= 0) return 0;
+  if (maxStage >= 9) return STAGE_PROGRESS[9];
+  return STAGE_PROGRESS[maxStage - 1] || 0;
+}
 const STAGE_NAMES = ['','납품/정위치','다이크/지진브라켓','전기 턴온','인터락테스트','유틸리티 턴온/인증','설비안정화 및 구동','셋업평가','셋업보고서','종료'];
 
 // 세부 단계 정의
@@ -657,6 +686,7 @@ async function onLoggedIn(user) {
 
   await loadProjects();
   await loadAllUnits();
+  await loadStageCompletions();
   await loadMyRecentLogs();
 
   // 첫 화면을 캘린더로
@@ -843,11 +873,36 @@ async function viewProjectHistory(id, name, color) {
 function updateProgressPreview() {
   const stage = parseInt(document.getElementById('log-stage').value);
   const preview = document.getElementById('progress-preview');
-  if (!stage) { preview.style.display='none'; return; }
+  const completeGroup = document.getElementById('stage-complete-group');
+  const completeChk = document.getElementById('log-stage-complete');
+  const completeLabel = document.getElementById('stage-complete-label');
+
+  if (!stage) {
+    preview.style.display='none';
+    if (completeGroup) completeGroup.style.display='none';
+    return;
+  }
+
+  // 진행률 미리보기 - 완료 체크 여부에 따라 동적 표시
   preview.style.display='block';
-  const pct = STAGE_PROGRESS[stage];
+  const unitId = document.getElementById('log-unit')?.value;
+  const isCompleted = completeChk?.checked;
+  const pct = isCompleted ? STAGE_PROGRESS[stage] : stagePct(stage + 1); // 완료 시 현재, 미완료 시 이전단계
   document.getElementById('progress-bar').style.width = pct+'%';
-  document.getElementById('progress-label').textContent = `${STAGE_NAMES[stage]} → 진척률 ${pct}%`;
+  document.getElementById('progress-label').textContent = isCompleted
+    ? `${STAGE_NAMES[stage]} 완료 → 진척률 ${STAGE_PROGRESS[stage]}%`
+    : `${STAGE_NAMES[stage]} 진행 중 → 진척률 ${stagePct(stage + 1)}% (완료 체크 시 ${STAGE_PROGRESS[stage]}%)`;
+
+  // 완료 체크박스 표시
+  if (completeGroup) {
+    completeGroup.style.display = 'block';
+    // 이미 완료된 단계면 자동 체크
+    if (unitId && completedStagesByUnit[unitId]?.has(stage)) {
+      completeChk.checked = true;
+      completeLabel.style.background = '#D1FAE5';
+      completeLabel.style.borderColor = '#10B981';
+    }
+  }
 }
 
 function updateSubStageSelect() {
@@ -1071,6 +1126,7 @@ async function submitLog() {
   const issue = document.getElementById('log-issue')?.value.trim() || '';
   const issueType = document.getElementById('log-issue-type')?.value || '';
   const date = document.getElementById('log-date').value;
+  const stageComplete = document.getElementById('log-stage-complete')?.checked || false;
 
   if (!projectId) { showMsg('log-msg','프로젝트를 선택해 주세요',false); return; }
   if (!content) { showMsg('log-msg','작업 내용을 입력해 주세요',false); return; }
@@ -1084,6 +1140,17 @@ async function submitLog() {
   });
   if (error) { showMsg('log-msg','저장 실패: '+error.message,false); return; }
 
+  // 단계 완료 체크 시 stage_completions upsert
+  if (stageComplete && unitId && stage) {
+    await sb.from('stage_completions').upsert(
+      { unit_id: unitId, stage, completed_at: new Date().toISOString() },
+      { onConflict: 'unit_id,stage' }
+    );
+    if (!completedStagesByUnit[unitId]) completedStagesByUnit[unitId] = new Set();
+    completedStagesByUnit[unitId].add(stage);
+  }
+
+  // 폼 초기화
   document.getElementById('log-content').value='';
   if (document.getElementById('log-issue')) document.getElementById('log-issue').value='';
   if (document.getElementById('log-issue-type')) document.getElementById('log-issue-type').value='';
@@ -1091,8 +1158,24 @@ async function submitLog() {
   document.getElementById('progress-preview').style.display='none';
   if (document.getElementById('sub-stage-group')) document.getElementById('sub-stage-group').style.display='none';
   if (document.getElementById('log-sub-stage')) document.getElementById('log-sub-stage').value='';
+  const completeChk = document.getElementById('log-stage-complete');
+  if (completeChk) { completeChk.checked = false; }
+  const completeGroup = document.getElementById('stage-complete-group');
+  if (completeGroup) completeGroup.style.display='none';
+  const completeLabel = document.getElementById('stage-complete-label');
+  if (completeLabel) { completeLabel.style.background='#F0FDF4'; completeLabel.style.borderColor='#BBF7D0'; }
+
   showMsg('log-msg','저장됐어요! ✓',true);
   await loadMyRecentLogs();
+}
+
+async function loadStageCompletions() {
+  const {data} = await sb.from('stage_completions').select('unit_id,stage');
+  completedStagesByUnit = {};
+  (data||[]).forEach(r => {
+    if (!completedStagesByUnit[r.unit_id]) completedStagesByUnit[r.unit_id] = new Set();
+    completedStagesByUnit[r.unit_id].add(r.stage);
+  });
 }
 
 async function loadMyRecentLogs() {
@@ -1634,13 +1717,14 @@ async function loadFabSummary() {
 
 // 진척률 연동: 세부단계 펼침 상태에 따라 진행률 재계산
 function calcUnitPct(unit) {
-  // 펼쳐진 단계가 있으면 세부단계 기준으로 진척률 세분화
-  let pct = STAGE_PROGRESS[unit.maxStage] || 0;
-  if (unit.maxStage > 0 && expandedStages.has(unit.maxStage)) {
-    const subs = SUB_STAGES[unit.maxStage] || [];
+  const compMax = getCompletedMaxStage(unit.id);
+  let pct = STAGE_PROGRESS[compMax] || 0;
+  // 세부단계 펼침 시 세분화 (완료된 최고단계 기준)
+  if (compMax > 0 && expandedStages.has(compMax)) {
+    const subs = SUB_STAGES[compMax] || [];
     if (subs.length > 0 && unit.subStages && unit.subStages.size > 0) {
       const doneSubs = subs.filter(s => unit.subStages.has(s.id)).length;
-      const prevPct = STAGE_PROGRESS[unit.maxStage - 1] || 0;
+      const prevPct = STAGE_PROGRESS[compMax - 1] || 0;
       const stepSize = pct - prevPct;
       pct = prevPct + Math.round((doneSubs / subs.length) * stepSize);
     }
@@ -1667,7 +1751,7 @@ function buildFabRow(label, units, isTotal) {
   if (total === 0) return '';
 
   const avgPct = total > 0
-    ? Math.round(units.reduce((sum,u) => sum + (STAGE_PROGRESS[u.maxStage]||0), 0) / total)
+    ? Math.round(units.reduce((sum,u) => sum + stagePct(u.id), 0) / total)
     : 0;
   const color = getProgressColor(avgPct);
 
@@ -1710,7 +1794,7 @@ function buildFabRow(label, units, isTotal) {
     const unitCards = units.map(u => {
       const unitObj = allUnits.find(au => au.id === u.id);
       if (!unitObj) return '';
-      const uPct = STAGE_PROGRESS[u.maxStage] || 0;
+      const uPct = stagePct(u.id);
       const uColor = getProgressColor(uPct);
       const stageName = u.maxStage ? `${u.maxStage}단계 · ${STAGE_NAMES[u.maxStage]}` : '시작 전';
       // 복사 시 줄바꿈 포함되도록 div로 감싸고, user-select 텍스트는 별도 숨김 span으로
@@ -1871,12 +1955,12 @@ async function loadStatus() {
     if (units.length > 0) {
       // 호기가 있으면 → 각 호기 최고 단계의 진척률 평균
       const total = units.reduce((sum, u) => {
-        return sum + (STAGE_PROGRESS[maxStageByUnit[u.id] || 0] || 0);
+        return sum + stagePct(u.id);
       }, 0);
       pct = Math.round(total / units.length);
     } else {
       // 호기 미등록이면 → 프로젝트 최고 단계 기준
-      pct = STAGE_PROGRESS[maxStageByProject[p.id] || 0] || 0;
+      pct = stagePctByMax(maxStageByProject[p.id] || 0);
     }
 
     // 대표 단계: 프로젝트 내 가장 높은 단계
@@ -2295,8 +2379,7 @@ async function loadUnresolvedIssues() {
             <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:${log.projects?.color}20;color:${log.projects?.color}">${escHtml(log.projects?.name||'')}</span>
             <span style="font-size:11px;color:var(--muted)">${log.log_date} · ${escHtml(log.author_name||'')}</span>
           </div>
-          <div style="font-size:11px;font-weight:700;color:#D97706;margin-bottom:2px">⚠️ 발생 내용</div>
-          <div style="font-size:13px;color:#D97706;font-weight:600;margin-bottom:2px">${escHtmlBr(log.issue)}</div>
+          <div style="font-size:13px;color:#D97706;font-weight:600;margin-bottom:2px">⚠️ ${escHtmlBr(log.issue)}</div>
           ${log.equipment?`<div style="font-size:11px;color:var(--muted)">📍 ${escHtml(log.equipment)}</div>`:''}
         </div>
         <button onclick="resolveIssue('${log.id}')"
@@ -2308,42 +2391,31 @@ async function loadUnresolvedIssues() {
 }
 
 function resolveIssue(id) {
+  // 확인 팝업
   const modal = document.getElementById('confirm-modal');
   modal.querySelector('.modal-box').innerHTML = `
-    <div style="padding:4px 0 14px">
-      <div style="font-size:28px;margin-bottom:8px">✅</div>
-      <h3 style="font-size:16px;font-weight:700;margin-bottom:6px">이슈 해결 완료 처리</h3>
-      <p style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:14px">해결 내용을 기록해 주세요.</p>
-      <div style="text-align:left;margin-bottom:14px">
-        <label style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px;display:block">해결 내용 <span style="font-weight:400;color:var(--muted)">(필수)</span></label>
-        <textarea id="resolve-note-input" placeholder="어떻게 해결했는지 상세히 입력해 주세요" style="width:100%;min-height:90px;font-size:13px;padding:10px 12px;border:1.5px solid var(--border);border-radius:10px;resize:vertical;outline:none"
-          oninput="document.getElementById('resolve-submit-btn').disabled=!this.value.trim()"></textarea>
-        <p id="resolve-note-error" style="font-size:12px;color:var(--danger);margin-top:4px;display:none">해결 내용을 입력해 주세요.</p>
-      </div>
+    <div style="text-align:center;padding:8px 0 16px">
+      <div style="font-size:36px;margin-bottom:10px">✅</div>
+      <h3 style="font-size:16px;font-weight:700;margin-bottom:8px">이슈 해결 완료 처리</h3>
+      <p style="font-size:13px;color:var(--muted);line-height:1.6">
+        이 이슈를 해결 완료로 처리할까요?<br>
+        처리 후에는 미해결 목록에서 사라져요.
+      </p>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal()">취소</button>
-      <button id="resolve-submit-btn" class="btn btn-primary" onclick="confirmResolveIssue('${id}')" style="background:#10B981" disabled>✓ 해결 완료</button>
+      <button class="btn btn-primary" onclick="confirmResolveIssue('${id}')" style="background:#10B981">✓ 해결 완료</button>
     </div>`;
   modal.classList.remove('hidden');
-  setTimeout(()=>document.getElementById('resolve-note-input')?.focus(), 100);
 }
 
 async function confirmResolveIssue(id) {
-  const noteEl = document.getElementById('resolve-note-input');
-  const resolveNote = noteEl ? noteEl.value.trim() : '';
-  if (!resolveNote) {
-    const errEl = document.getElementById('resolve-note-error');
-    if (errEl) errEl.style.display = 'block';
-    return;
-  }
   closeModal();
   const today = new Date().toISOString().slice(0,10);
   await sb.from('work_logs').update({
     issue_resolved: true,
     issue_resolved_by: currentUserName || '',
     issue_resolved_date: today,
-    issue_resolve_note: resolveNote,
   }).eq('id', id);
   await fetchCalendarData();
   renderCalendar();
@@ -2843,7 +2915,7 @@ async function loadIssuesTab() {
 
 async function fetchAllIssues() {
   const {data} = await sb.from('work_logs')
-    .select('*, projects(name), equipment_units(name,fab,location), issue_resolve_note')
+    .select('*, projects(name), equipment_units(name,fab,location)')
     .not('issue','is',null)
     .neq('issue','')
     .order('created_at',{ascending:false});
@@ -2911,8 +2983,7 @@ function filterIssues() {
                &nbsp;${escHtml(i.issue_resolved_by || '')}
                ${i.issue_resolved_date ? `<span style="background:#D1FAE5;padding:1px 6px;border-radius:4px;margin-left:4px">${i.issue_resolved_date}</span>` : ''}
                ${days !== null ? `<span style="background:#F0FDF4;color:#059669;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:4px;border:1px solid #BBF7D0">${days === 0 ? '당일' : `+${days}일`}</span>` : ''}
-             </div>
-             ${i.issue_resolve_note ? `<div style="margin-top:8px;font-size:12px;color:#065F46;background:#D1FAE5;border-left:3px solid #10B981;padding:8px 10px;border-radius:0 8px 8px 0;line-height:1.6;white-space:pre-wrap;word-break:keep-all">💬 ${escHtml(i.issue_resolve_note)}</div>` : ''}`;
+             </div>`;
             })()
           : `<div style="font-size:11px;color:#D97706;font-weight:600">⏳ 미해결</div>`}
       </div>
