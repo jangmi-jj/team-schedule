@@ -190,7 +190,10 @@ const SUB_STAGES = {
 };
 
 let sb, currentUser = null;
-let allUnits=[], allLogs=[], allSubLogs=[], allTargets=[], allFabStatus={}, allUnitNotes={};
+let allUnits=[], allLogs=[], allSubLogs=[], allTargets=[], allFabStatus={}, allUnitNotes={}, completedStagesByUnit={};
+
+function getCompletedMaxStage(unitId){const s=completedStagesByUnit[unitId];if(!s||s.size===0)return 0;return Math.max(...s);}
+function stagePct(unitId){return STAGE_PROGRESS[getCompletedMaxStage(unitId)]||0;}
 let expandedFabs = new Set();
 let expandedStages = new Set(); // 세부단계 펼침
 let visibleFabs = new Set();    // 관리자 설정 표시 FAB
@@ -275,13 +278,14 @@ function updateAuthUI(){
 
 // ── 데이터 로드 ──
 async function loadAll(){
-  const [{data:units},{data:logs},{data:subLogs},{data:targets},{data:fabList},{data:unitNotes}] = await Promise.all([
+  const [{data:units},{data:logs},{data:subLogs},{data:targets},{data:fabList},{data:unitNotes},{data:stageComps}] = await Promise.all([
     sb.from('equipment_units').select('*').order('created_at'),
     sb.from('work_logs').select('unit_id,stage').not('unit_id','is',null).gt('stage',0),
     sb.from('work_logs').select('unit_id,stage,sub_stage').not('unit_id','is',null).not('sub_stage','is',null),
     sb.from('fab_targets').select('*'),
     sb.from('fab_status').select('*'),
     sb.from('unit_notes').select('*'),
+    sb.from('stage_completions').select('unit_id,stage'),
   ]);
   allUnits=units||[];
   allLogs=logs||[];
@@ -291,6 +295,11 @@ async function loadAll(){
   (fabList||[]).forEach(f=>{allFabStatus[f.fab]=f;});
   allUnitNotes={};
   (unitNotes||[]).forEach(n=>{allUnitNotes[n.unit_id]=n;});
+  completedStagesByUnit={};
+  (stageComps||[]).forEach(r=>{
+    if(!completedStagesByUnit[r.unit_id])completedStagesByUnit[r.unit_id]=new Set();
+    completedStagesByUnit[r.unit_id].add(r.stage);
+  });
   // hidden_units 파싱 (fab_status에 JSON으로 저장)
   visibleUnits = new Set();
   (fabList||[]).forEach(f=>{
@@ -486,9 +495,9 @@ function renderFabManagePanel(fabMap){
 // ── 요약 카드 ──
 function renderSummary(fabMap){
   const shownFabs=Object.keys(fabMap).filter(f=>visibleFabs.has(f));
-  const shownUnits=shownFabs.flatMap(f=>fabMap[f]);
+  const shownUnits=shownFabs.flatMap(f=>fabMap[f]).filter(u=>!(visibleUnits&&visibleUnits.has(u.id)));
   const total=shownUnits.length;
-  const avgPct=total>0?Math.round(shownUnits.reduce((s,u)=>s+(STAGE_PROGRESS[u.maxStage]||0),0)/total):0;
+  const avgPct=total>0?Math.round(shownUnits.reduce((s,u)=>s+(stagePct(u.id)),0)/total):0;
   const completed=shownUnits.filter(u=>u.maxStage>=9).length;
   const redFabs=shownFabs.filter(f=>(fabMap[f]||[]).some(u=>allUnitNotes[u.id]?.has_issue)).length;
   const redUnits=shownUnits.filter(u=>allUnitNotes[u.id]?.has_issue).length;
@@ -513,49 +522,72 @@ function renderTable(fabMap){
 
   fabs.forEach(fab=>{
     const units=fabMap[fab];
-    const total=units.length;
-    const avgPct=Math.round(units.reduce((s,u)=>s+(STAGE_PROGRESS[u.maxStage]||0),0)/total);
+    // 표시 호기만 (숨김 제외)
+    const shownUnits=units.filter(u=>!(visibleUnits&&visibleUnits.has(u.id)));
+    const total=shownUnits.length||1;
+    const avgPct=Math.round(shownUnits.reduce((s,u)=>s+(stagePct(u.id)),0)/total);
     const color=getProgressColor(avgPct);
     const note=allFabStatus[fab]?.note||'';
     const isExp=expandedFabs.has(fab);
     const fabKey=fab.replace(/[^a-zA-Z0-9가-힣]/g,'_');
 
-    // 단계별 셀 (2단: 1단=완료수/전체수 or 체크, 2단=목표일)
+    // 단계별 셀 (표시 호기 기준)
     let stageCells='';
     for(let s=1;s<=9;s++){
-      const done=units.filter(u=>u.maxStage>=s).length;
+      const done=shownUnits.filter(u=>completedStagesByUnit[u.id]?.has(s)).length;
       const allDone=done===total;
-      const bg=allDone?'#D1FAE5':done>0?'#FEF9C3':'#fff';
+      const hasLog=shownUnits.filter(u=>u.maxStage>=s).length;
+      const bg=allDone?'#D1FAE5':done>0?'#FEF9C3':hasLog>0?'#FFFDE7':'#fff';
 
-      // 2단: 가장 마지막(최대) 목표일 표시
-      const stageDates=units
-        .filter(u=>u.maxStage<s)
+      // 미완료(stage_completions 기준) 표시 호기들의 목표일 중 가장 빠른 날짜
+      const stageDates=shownUnits
+        .filter(u=>!completedStagesByUnit[u.id]?.has(s))
         .map(u=>{ const t=allTargets.find(t=>t.unit_id===u.id&&t.stage===s); return t?.target_date||null; })
         .filter(Boolean)
         .sort();
-      const latestDate=stageDates.length?stageDates[stageDates.length-1]:null;
+      const earliestDate=stageDates.length?stageDates[0]:null;
 
       let row1, row2;
       if(allDone){
-        // 전체 완료 → 체크 하나만
         row1=`<span style="color:#059669;font-size:16px">✓</span>`;
         row2='';
       } else {
-        row1=`<span style="font-weight:700;font-size:12px">${done}/${total}</span>`;
-        const overdueUnits=units.filter(u=>u.maxStage<s&&allTargets.find(t=>t.unit_id===u.id&&t.stage===s&&isOverdue(t.target_date))).length;
-        row2=latestDate
-          ?`<div style="font-size:10px;font-weight:600;margin-top:2px;color:${overdueUnits>0?'#EF4444':'#6366F1'}">목표 ${formatDate(latestDate)}${overdueUnits>0?` <span style="background:#FEE2E2;padding:1px 4px;border-radius:3px">D+초과 ${overdueUnits}대</span>`:''}</div>`
-          :`<div style="font-size:10px;color:#CBD5E1;margin-top:2px">목표 미설정</div>`;
+        const notDoneUnits=shownUnits.filter(u=>!completedStagesByUnit[u.id]?.has(s));
+        const overdueUnits=notDoneUnits.filter(u=>allTargets.find(t=>t.unit_id===u.id&&t.stage===s&&isOverdue(t.target_date))).length;
+        const inProgressUnits=shownUnits.filter(u=>u.maxStage>=s&&!completedStagesByUnit[u.id]?.has(s)).length;
+        row1=`<span style="font-weight:700;font-size:12px">${done}/${total}</span>${inProgressUnits>0?`<span style="font-size:9px;color:#D97706;display:block">⏳${inProgressUnits}진행중</span>`:''}`;
+        if(earliestDate){
+          const ds=getDateStatus(earliestDate);
+          const overdue=ds==='overdue';
+          const near=ds==='near';
+          let dateColor=overdue?'#EF4444':near?'#D97706':'#6366F1';
+          let labelText=overdue?'⚠️ 목표일 초과':near?'🔥 마감 임박':'목표';
+          let labelColor=overdue?'#EF4444':near?'#B45309':'#6366F1';
+          let labelWeight=overdue||near?'700':'600';
+          let dateStyle=near?'animation:blink-warn 1.2s ease-in-out infinite':'';
+          row2=`<div style="font-size:10px;color:${labelColor};font-weight:${labelWeight};margin-top:2px">${labelText}</div>
+                <div style="font-size:11px;font-weight:700;color:${dateColor};${dateStyle}">${formatDate(earliestDate)}${overdueUnits>0?` <span style="background:#FEE2E2;padding:1px 4px;border-radius:3px;font-size:10px">초과 ${overdueUnits}대</span>`:''}</div>`;
+        } else {
+          row2=`<div style="font-size:10px;color:#CBD5E1;margin-top:2px">목표 미설정</div>`;
+        }
       }
 
-      stageCells+=`<td style="background:${bg};vertical-align:middle">
+      // 셀 배경: 완료여부 + 날짜상태 반영
+      const fabCellDateStatus=earliestDate?getDateStatus(earliestDate):'none';
+      const fabCellBorder=fabCellDateStatus==='overdue'?';border:1px solid #FECACA':fabCellDateStatus==='near'?';border:1px solid #FCD34D':'';
+      const fabCellBg=allDone?'#D1FAE5'
+        :fabCellDateStatus==='overdue'?'#FFF1F2'
+        :fabCellDateStatus==='near'?'#FFFBEB'
+        :done>0?'#FEF9C3':'#fff';
+
+      stageCells+=`<td style="background:${fabCellBg}${fabCellBorder};vertical-align:middle">
         ${row1}${row2}
       </td>`;
 
       // 세부단계 컬럼
       if(expandedStages.has(s)){
         (SUB_STAGES[s]||[]).forEach(sub=>{
-          const subDone=units.filter(u=>u.subStages&&u.subStages.has(sub.id)).length;
+          const subDone=shownUnits.filter(u=>u.subStages&&u.subStages.has(sub.id)).length;
           const subBg=subDone===total?'#D1FAE5':subDone>0?'#EDE9FE':'#FAFAFA';
           stageCells+=`<td style="background:${subBg};border:1px solid #C4B5FD">
             ${subDone>0?`<div style="font-size:11px;font-weight:700;color:#6D28D9">${subDone}/${total}</div>`:'<span style="color:#DDD6FE">—</span>'}
@@ -564,8 +596,8 @@ function renderTable(fabMap){
       }
     }
 
-    // 신호등 - 호기 특이사항 자동 연동
-    const hasUnitIssue=units.some(u=>allUnitNotes[u.id]?.has_issue);
+    // 신호등 - 표시 호기 특이사항 자동 연동
+    const hasUnitIssue=shownUnits.some(u=>allUnitNotes[u.id]?.has_issue);
     const status=hasUnitIssue?'red':'green';
     const sigHtml=`<span class="signal signal-${status}">${status==='green'?'🟢 정상':'🔴 특이'}</span>`;
 
@@ -597,32 +629,57 @@ function renderTable(fabMap){
     // 호기 행
     if(isExp){
       units.filter(u=>!visibleUnits||!visibleUnits.has(u.id)).forEach(u=>{
-        const uPct=STAGE_PROGRESS[u.maxStage]||0;
+        const uPct=stagePct(u.id);
         const uColor=getProgressColor(uPct);
         const nextStage=u.maxStage<9?u.maxStage+1:null;
         let uStageCells='';
         for(let s=1;s<=9;s++){
-          const done=u.maxStage>=s;
+          const isCompleted=completedStagesByUnit[u.id]?.has(s)||false;
+          const hasLog=u.maxStage>=s; // 로그가 있는지(작업 진행중)
           const t=allTargets.find(t=>t.unit_id===u.id&&t.stage===s);
-          if(done){
-            // 완료 단계: 초록 체크
-            uStageCells+=`<td style="background:#D1FAE5;color:#065F46;font-size:12px;font-weight:700">✓</td>`;
+          if(isCompleted){
+            // 완료된 단계: 초록 체크 (읽기 전용)
+            uStageCells+=`<td style="background:#D1FAE5;color:#065F46;font-size:13px;font-weight:700;vertical-align:middle;text-align:center">✓</td>`;
+          } else if(hasLog){
+            // 로그는 있지만 미완료: 진행중 표시
+            let dateStatus=getDateStatus(t?.target_date);
+            let overdue=dateStatus==='overdue';let near=dateStatus==='near';
+            let cellBg=overdue?'#FFF1F2':near?'#FFFBEB':'#FFFDE7';
+            let cellBorder=overdue?';border:1px solid #FECACA':near?';border:1px solid #FCD34D':';border:1px solid #FDE68A';
+            let dateColor=overdue?'#EF4444':near?'#D97706':t?.target_date?'#4F46E5':'#CBD5E1';
+            let labelText=overdue?'⚠️ 목표일 초과':near?'🔥 마감 임박':'진행중';
+            let labelColor=overdue?'#EF4444':near?'#B45309':'#D97706';
+            let dateStyle=near?'animation:blink-warn 1.2s ease-in-out infinite':'';
+            if(currentUser){
+              uStageCells+=`<td style="background:${cellBg}${cellBorder}" onclick="event.stopPropagation()">
+                <div id="tv-${u.id}-${s}">
+                  <div style="font-size:10px;color:${labelColor};font-weight:700;margin-bottom:1px">⏳ ${labelText}</div>
+                  <div style="font-size:11px;font-weight:700;color:${dateColor};${dateStyle}">${t?.target_date?formatDate(t.target_date):'미설정'}</div>
+                  <button class="edit-btn" onclick="startTarget('${u.id}',${s})" style="margin-top:2px">✏️</button>
+                </div>
+                <div id="te-${u.id}-${s}" style="display:none">
+                  <input type="date" id="ti-${u.id}-${s}" value="${t?.target_date||''}" style="font-size:10px;padding:3px 5px;width:100%;margin-bottom:3px" />
+                  <div style="display:flex;gap:3px"><button class="save-btn" onclick="saveTarget('${u.id}',${s})">저장</button><button class="cancel-btn" onclick="cancelTarget('${u.id}',${s})">취소</button></div>
+                </div>
+              </td>`;
+            } else {
+              uStageCells+=`<td style="background:${cellBg}${cellBorder}">
+                <div style="font-size:10px;color:${labelColor};font-weight:700;margin-bottom:1px">⏳ ${labelText}</div>
+                <div style="font-size:11px;font-weight:700;color:${dateColor};${dateStyle}">${t?.target_date?formatDate(t.target_date):'—'}</div>
+              </td>`;
+            }
           } else {
-            // 미완료 단계: 목표일 입력/표시
-            const dateStatus=getDateStatus(t?.target_date);
-            const overdue=dateStatus==='overdue';
-            const near=dateStatus==='near';
-            // 셀 배경/테두리
-            const cellBg=overdue?'#FFF1F2':near?'#FFFBEB':'#F8FAFF';
-            const cellBorder=overdue?';border:1px solid #FECACA':near?';border:1px solid #FCD34D':'';
-            // 날짜 텍스트 색
-            const dateColor=overdue?'#EF4444':near?'#D97706':t?.target_date?'#4F46E5':'#CBD5E1';
-            // 라벨 텍스트/색
-            const labelText=overdue?'⚠️ 목표일 초과':near?'🔥 마감 임박':'목표일';
-            const labelColor=overdue?'#EF4444':near?'#B45309':'var(--muted)';
-            const labelWeight=overdue||near?'700':'400';
-            // near 깜빡임 애니메이션 (인라인 keyframes은 안 되므로 클래스 방식)
-            const dateStyle=near?'animation:blink-warn 1.2s ease-in-out infinite':'';
+            // 미시작 단계: 목표일만 표시
+            let dateStatus=getDateStatus(t?.target_date);
+            let overdue=dateStatus==='overdue';
+            let near=dateStatus==='near';
+            let cellBg=overdue?'#FFF1F2':near?'#FFFBEB':'#F8FAFF';
+            let cellBorder=overdue?';border:1px solid #FECACA':near?';border:1px solid #FCD34D':'';
+            let dateColor=overdue?'#EF4444':near?'#D97706':t?.target_date?'#4F46E5':'#CBD5E1';
+            let labelText=overdue?'⚠️ 목표일 초과':near?'🔥 마감 임박':'목표일';
+            let labelColor=overdue?'#EF4444':near?'#B45309':'var(--muted)';
+            let labelWeight=overdue||near?'700':'400';
+            let dateStyle=near?'animation:blink-warn 1.2s ease-in-out infinite':'';
             if(currentUser){
               uStageCells+=`<td style="background:${cellBg}${cellBorder}" onclick="event.stopPropagation()">
                 <div id="tv-${u.id}-${s}">
@@ -690,19 +747,20 @@ function renderTable(fabMap){
     }
   });
 
-  // 전체 합계
-  const totalCount=allShownUnits.length;
+  // 전체 합계 (표시 호기만)
+  const allShownUnitsFiltered=allShownUnits.filter(u=>!(visibleUnits&&visibleUnits.has(u.id)));
+  const totalCount=allShownUnitsFiltered.length;
   if(totalCount>0){
-    const totalAvg=Math.round(allShownUnits.reduce((s,u)=>s+(STAGE_PROGRESS[u.maxStage]||0),0)/totalCount);
+    const totalAvg=Math.round(allShownUnitsFiltered.reduce((s,u)=>s+(stagePct(u.id)),0)/totalCount);
     const totalColor=getProgressColor(totalAvg);
     let totalStageCells='';
     for(let s=1;s<=9;s++){
-      const done=allShownUnits.filter(u=>u.maxStage>=s).length;
+      const done=allShownUnitsFiltered.filter(u=>completedStagesByUnit[u.id]?.has(s)).length;
       const bg=done===totalCount?'#D1FAE5':done>0?'#FEF9C3':'#fff';
       totalStageCells+=`<td style="background:${bg}">${done>0?`<b>${done}/${totalCount}</b>`:'—'}</td>`;
       if(expandedStages.has(s)){
         (SUB_STAGES[s]||[]).forEach(sub=>{
-          const subDone=allShownUnits.filter(u=>u.subStages&&u.subStages.has(sub.id)).length;
+          const subDone=allShownUnitsFiltered.filter(u=>u.subStages&&u.subStages.has(sub.id)).length;
           const subBg=subDone===totalCount?'#D1FAE5':subDone>0?'#EDE9FE':'#FAFAFA';
           totalStageCells+=`<td style="background:${subBg};border:1px solid #C4B5FD">${subDone>0?`<b style="color:#6D28D9">${subDone}/${totalCount}</b>`:'—'}</td>`;
         });
@@ -744,6 +802,22 @@ function unlockUrl(){
 
 // ── 이벤트 핸들러 ──
 function toggleFab(fab){if(expandedFabs.has(fab))expandedFabs.delete(fab);else expandedFabs.add(fab);renderAll();}
+
+async function toggleStageComplete(unitId, stage, complete){
+  if(!currentUser)return;
+  if(complete){
+    await sb.from('stage_completions').upsert(
+      {unit_id:unitId,stage,completed_at:new Date().toISOString()},
+      {onConflict:'unit_id,stage'}
+    );
+    if(!completedStagesByUnit[unitId])completedStagesByUnit[unitId]=new Set();
+    completedStagesByUnit[unitId].add(stage);
+  } else {
+    await sb.from('stage_completions').delete().eq('unit_id',unitId).eq('stage',stage);
+    completedStagesByUnit[unitId]?.delete(stage);
+  }
+  renderAll();
+}
 
 // 호기 비고 핸들러
 function startUnitNote(uid){const k=String(uid).replace(/[^a-zA-Z0-9]/g,'_');document.getElementById('unv-'+k).style.display='none';document.getElementById('une-'+k).style.display='block';}
