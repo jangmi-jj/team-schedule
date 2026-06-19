@@ -519,6 +519,11 @@
   <!-- 탭4: PJT 관리 -->
   <div id="tab-projects" class="tab-content hidden">
     <div class="section-title">프로젝트 목록</div>
+    <div style="position:relative;margin-bottom:12px">
+      <input type="text" id="pjt-search" placeholder="🔍 프로젝트 검색 (고객사 · 납품처 · 설비명 · 코드 등 이름에 포함된 단어)" oninput="onPjtSearchInput()" style="width:100%;padding:10px 36px 10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box" />
+      <button id="pjt-search-clear" onclick="clearPjtSearch()" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px">✕</button>
+    </div>
+    <div id="pjt-search-result-count" style="font-size:11px;color:var(--muted);margin-bottom:10px;display:none"></div>
     <div id="project-list"><div class="loading">불러오는 중...</div></div>
     <div class="add-box">
       <h4>➕ 새 프로젝트 추가</h4>
@@ -667,6 +672,7 @@ let projectProgressMap = {}; // { project_id: pct }
 
 let sb, currentUser, currentUserName = '';
 let projects = [];
+let pjtSearchQuery = '';
 let allUnits = []; // 전체 호기 목록
 let unitsByProject = {}; // { project_id: [units] }
 let statusData = []; // PJT 현황 렌더링용 데이터
@@ -796,8 +802,20 @@ function onProjectChange() {
 
 function loadProjectList() {
   const el = document.getElementById('project-list');
+  let list = projects;
+  if (pjtSearchQuery) list = list.filter(p => p.name.toLowerCase().includes(pjtSearchQuery));
+
+  const countEl = document.getElementById('pjt-search-result-count');
+  if (pjtSearchQuery) {
+    countEl.style.display = 'block';
+    countEl.textContent = '"' + pjtSearchQuery + '" 검색 결과: ' + list.length + '개';
+  } else {
+    countEl.style.display = 'none';
+  }
+
   if (!projects.length) { el.innerHTML = '<p class="log-empty">등록된 프로젝트가 없어요</p>'; return; }
-  el.innerHTML = projects.map(p=>{
+  if (!list.length) { el.innerHTML = '<p class="log-empty">"' + escHtml(pjtSearchQuery) + '" 검색 결과가 없어요</p>'; return; }
+  el.innerHTML = list.map(p=>{
     const units = unitsByProject[p.id] || [];
     const pct = projectProgressMap[p.id] || 0;
     const color = getProgressColor(pct);
@@ -829,6 +847,24 @@ function loadProjectList() {
       </div>` : ''}
     </div>`;
   }).join('');
+}
+
+// ── PJT 관리 검색 ──
+let pjtSearchDebounce = null;
+function onPjtSearchInput() {
+  const val = document.getElementById('pjt-search').value;
+  document.getElementById('pjt-search-clear').style.display = val ? '' : 'none';
+  clearTimeout(pjtSearchDebounce);
+  pjtSearchDebounce = setTimeout(() => {
+    pjtSearchQuery = val.trim().toLowerCase();
+    loadProjectList();
+  }, 150);
+}
+function clearPjtSearch() {
+  document.getElementById('pjt-search').value = '';
+  document.getElementById('pjt-search-clear').style.display = 'none';
+  pjtSearchQuery = '';
+  loadProjectList();
 }
 
 function startEditProject(id, currentName) {
