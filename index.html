@@ -437,16 +437,48 @@
   <!-- 탭4: 이슈 관리 -->
   <div id="tab-issues" class="tab-content hidden">
 
+    <!-- 이슈 통계 요약 -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+      <div class="card" style="padding:14px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px">전체 이슈</div>
+        <div id="stat-total" style="font-size:26px;font-weight:800;color:#1A2B4C">-</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">건</div>
+      </div>
+      <div class="card" style="padding:14px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px">미해결</div>
+        <div id="stat-unresolved" style="font-size:26px;font-weight:800;color:#D97706">-</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">건</div>
+      </div>
+      <div class="card" style="padding:14px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px">해결 완료</div>
+        <div id="stat-resolved" style="font-size:26px;font-weight:800;color:#059669">-</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">건</div>
+      </div>
+      <div class="card" style="padding:14px;text-align:center">
+        <div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:6px">평균 해결 기간</div>
+        <div id="stat-avgdays" style="font-size:26px;font-weight:800;color:#4F46E5">-</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">일</div>
+      </div>
+    </div>
+
     <!-- 차트 영역 -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
       <div class="card" style="padding:16px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:10px">이슈 유형별</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">이슈 유형별 비율</div>
+        <div id="stat-type-detail" style="font-size:11px;color:var(--muted);margin-bottom:10px"></div>
         <canvas id="chart-type" height="180"></canvas>
       </div>
       <div class="card" style="padding:16px">
-        <div style="font-size:13px;font-weight:700;margin-bottom:10px">해결 현황</div>
+        <div style="font-size:13px;font-weight:700;margin-bottom:4px">해결 현황 비율</div>
+        <div id="stat-resolved-detail" style="font-size:11px;color:var(--muted);margin-bottom:10px"></div>
         <canvas id="chart-resolved" height="180"></canvas>
       </div>
+    </div>
+
+    <!-- 월별 차트 -->
+    <div class="card" style="padding:16px;margin-bottom:16px">
+      <div style="font-size:13px;font-weight:700;margin-bottom:10px">월별 발생 / 해결 건수</div>
+      <canvas id="chart-monthly" height="100"></canvas>
     </div>
 
     <!-- 필터 -->
@@ -466,6 +498,18 @@
       <select id="issue-filter-project" onchange="filterIssues()" style="flex:1;min-width:120px">
         <option value="">전체 프로젝트</option>
       </select>
+    </div>
+
+    <!-- 다운로드 버튼 -->
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-bottom:12px">
+      <button onclick="downloadIssues('xlsx')"
+        style="display:flex;align-items:center;gap:6px;padding:7px 14px;border:1.5px solid #059669;border-radius:8px;background:#fff;color:#059669;font-size:12px;font-weight:700;cursor:pointer">
+        📥 엑셀 다운로드
+      </button>
+      <button onclick="downloadIssues('csv')"
+        style="display:flex;align-items:center;gap:6px;padding:7px 14px;border:1.5px solid #4F46E5;border-radius:8px;background:#fff;color:#4F46E5;font-size:12px;font-weight:700;cursor:pointer">
+        📄 CSV 다운로드
+      </button>
     </div>
 
     <!-- 이슈 목록 -->
@@ -2952,6 +2996,7 @@ async function goToProjectHistory(projectId) {
 let allIssues = [];
 let issueChartType = null;
 let issueChartResolved = null;
+let issueChartMonthly = null;
 
 async function loadIssuesTab() {
   const sel = document.getElementById('issue-filter-project');
@@ -3039,27 +3084,204 @@ function filterIssues() {
   }).join('');
 }
 
+// ── 이슈 다운로드 ──
+function downloadIssues(format) {
+  // 현재 필터 적용된 목록 사용
+  const typeF     = document.getElementById('issue-filter-type')?.value || '';
+  const resolvedF = document.getElementById('issue-filter-resolved')?.value || '';
+  const projF     = document.getElementById('issue-filter-project')?.value || '';
+
+  const list = allIssues.filter(i => {
+    if (typeF && i.issue_type !== typeF) return false;
+    if (resolvedF !== '' && String(i.issue_resolved) !== resolvedF) return false;
+    if (projF && i.project_id !== projF) return false;
+    return true;
+  });
+
+  if (!list.length) { alert('다운로드할 이슈가 없어요.'); return; }
+
+  const headers = ['등록일','등록자','프로젝트','호기','위치','이슈유형','이슈내용','상태','해결자','해결일','처리기간(일)','해결메모'];
+
+  const rows = list.map(i => {
+    const unitName = i.equipment_units?.name || '';
+    const unitLoc  = [i.equipment_units?.fab, i.equipment_units?.location].filter(Boolean).join(' · ');
+    const days = (i.issue_resolved && i.issue_resolved_date && i.log_date)
+      ? Math.round((new Date(i.issue_resolved_date) - new Date(i.log_date)) / 86400000)
+      : '';
+    return [
+      i.log_date || '',
+      i.author_name || '',
+      i.projects?.name || '',
+      unitName,
+      unitLoc,
+      i.issue_type || '',
+      i.issue || '',
+      i.issue_resolved ? '해결완료' : '미해결',
+      i.issue_resolved_by || '',
+      i.issue_resolved_date || '',
+      days,
+      i.issue_resolve_note || '',
+    ];
+  });
+
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+  const filename = `이슈목록_${stamp}`;
+
+  if (format === 'csv') {
+    // BOM 추가로 한글 인코딩 문제 해결
+    const BOM = '\uFEFF';
+    const escape = v => {
+      const s = String(v ?? '');
+      return (s.includes(',') || s.includes('"') || s.includes('\n')) ? `"${s.replace(/"/g,'""')}"` : s;
+    };
+    const csv = BOM + [headers, ...rows].map(r => r.map(escape).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+  } else {
+    // XLSX: SheetJS 없이 순수 HTML Table → .xls (Excel이 읽을 수 있는 형식)
+    // 한글 인코딩을 위해 meta charset UTF-8 포함
+    const escH = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const headerHtml = headers.map(h => `<th style="background:#1A2B4C;color:#fff;padding:6px 10px;border:1px solid #ccc">${escH(h)}</th>`).join('');
+    const rowsHtml = rows.map(r =>
+      '<tr>' + r.map(c => `<td style="padding:5px 10px;border:1px solid #ddd;white-space:pre-wrap">${escH(c)}</td>`).join('') + '</tr>'
+    ).join('');
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>이슈목록</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<body><table><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></body></html>`;
+    const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename + '.xls';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+}
+
 function renderIssueCharts() {
-  const types = ['하드웨어_원자재','하드웨어_휴먼','소프트웨어','기타'];
-  const typeCounts = types.map(t=>allIssues.filter(i=>i.issue_type===t).length);
+  const total      = allIssues.length;
+  const resolved   = allIssues.filter(i => i.issue_resolved).length;
+  const unresolved = total - resolved;
+
+  // ── 요약 숫자 ──
+  const elTotal      = document.getElementById('stat-total');
+  const elUnresolved = document.getElementById('stat-unresolved');
+  const elResolved   = document.getElementById('stat-resolved');
+  const elAvg        = document.getElementById('stat-avgdays');
+  if (elTotal)      elTotal.textContent      = total;
+  if (elUnresolved) elUnresolved.textContent = unresolved;
+  if (elResolved)   elResolved.textContent   = resolved;
+
+  // 평균 해결 기간 (해결된 것만)
+  const resolvedWithDays = allIssues.filter(i =>
+    i.issue_resolved && i.issue_resolved_date && i.log_date
+  );
+  if (elAvg) {
+    if (resolvedWithDays.length) {
+      const totalDays = resolvedWithDays.reduce((sum, i) =>
+        sum + Math.round((new Date(i.issue_resolved_date) - new Date(i.log_date)) / 86400000), 0);
+      elAvg.textContent = (totalDays / resolvedWithDays.length).toFixed(1);
+    } else {
+      elAvg.textContent = '-';
+    }
+  }
+
+  // ── 유형별 차트 ──
+  const types      = ['하드웨어_원자재','하드웨어_휴먼','소프트웨어','기타'];
   const typeColors = ['#EF4444','#F59E0B','#4F46E5','#94A3B8'];
+  const typeCounts = types.map(t => allIssues.filter(i => i.issue_type === t).length);
+
+  // 유형별 상세 텍스트
+  const typeDetail = document.getElementById('stat-type-detail');
+  if (typeDetail) {
+    typeDetail.innerHTML = types.map((t, idx) => {
+      const cnt = typeCounts[idx];
+      const pct = total ? Math.round(cnt / total * 100) : 0;
+      return `<span style="margin-right:10px"><span style="color:${typeColors[idx]};font-weight:700">●</span> ${t} ${cnt}건 (${pct}%)</span>`;
+    }).join('');
+  }
 
   if (issueChartType) issueChartType.destroy();
   const ctxType = document.getElementById('chart-type');
   if (ctxType) issueChartType = new Chart(ctxType, {
-    type:'bar',
-    data:{labels:types,datasets:[{data:typeCounts,backgroundColor:typeColors,borderRadius:6}]},
-    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}},responsive:true}
+    type: 'bar',
+    data: {
+      labels: types,
+      datasets: [{ data: typeCounts, backgroundColor: typeColors, borderRadius: 6 }]
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+      responsive: true
+    }
   });
 
-  const resolved = allIssues.filter(i=>i.issue_resolved).length;
-  const unresolved = allIssues.length - resolved;
+  // ── 해결 현황 차트 ──
+  const resolvedPct   = total ? Math.round(resolved / total * 100) : 0;
+  const unresolvedPct = total ? 100 - resolvedPct : 0;
+  const resDetail = document.getElementById('stat-resolved-detail');
+  if (resDetail) {
+    resDetail.innerHTML =
+      `<span style="margin-right:10px"><span style="color:#10B981;font-weight:700">●</span> 해결완료 ${resolved}건 (${resolvedPct}%)</span>` +
+      `<span><span style="color:#F59E0B;font-weight:700">●</span> 미해결 ${unresolved}건 (${unresolvedPct}%)</span>`;
+  }
+
   if (issueChartResolved) issueChartResolved.destroy();
   const ctxRes = document.getElementById('chart-resolved');
   if (ctxRes) issueChartResolved = new Chart(ctxRes, {
-    type:'doughnut',
-    data:{labels:['해결 완료','미해결'],datasets:[{data:[resolved,unresolved],backgroundColor:['#10B981','#F59E0B'],borderWidth:0}]},
-    options:{plugins:{legend:{position:'bottom'}},responsive:true}
+    type: 'doughnut',
+    data: {
+      labels: ['해결 완료', '미해결'],
+      datasets: [{ data: [resolved, unresolved], backgroundColor: ['#10B981', '#F59E0B'], borderWidth: 0 }]
+    },
+    options: { plugins: { legend: { position: 'bottom' } }, responsive: true }
+  });
+
+  // ── 월별 발생/해결 차트 ──
+  // 최근 12개월 라벨 생성
+  const now = new Date();
+  const months = [];
+  for (let m = 11; m >= 0; m--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - m, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
+
+  const monthOccurred = months.map(ym =>
+    allIssues.filter(i => i.log_date && i.log_date.slice(0,7) === ym).length
+  );
+  const monthResolved = months.map(ym =>
+    allIssues.filter(i => i.issue_resolved && i.issue_resolved_date && i.issue_resolved_date.slice(0,7) === ym).length
+  );
+
+  const monthLabels = months.map(ym => {
+    const [y, m] = ym.split('-');
+    return `${y.slice(2)}년 ${parseInt(m)}월`;
+  });
+
+  if (issueChartMonthly) issueChartMonthly.destroy();
+  const ctxMon = document.getElementById('chart-monthly');
+  if (ctxMon) issueChartMonthly = new Chart(ctxMon, {
+    type: 'bar',
+    data: {
+      labels: monthLabels,
+      datasets: [
+        { label: '발생', data: monthOccurred, backgroundColor: '#FCD34D', borderRadius: 4 },
+        { label: '해결', data: monthResolved, backgroundColor: '#10B981', borderRadius: 4 },
+      ]
+    },
+    options: {
+      plugins: { legend: { position: 'top' } },
+      scales: {
+        x: { grid: { display: false } },
+        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+      },
+      responsive: true
+    }
   });
 }
 
