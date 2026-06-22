@@ -1217,14 +1217,14 @@ async function submitLog() {
   });
   if (error) { showMsg('log-msg','저장 실패: '+error.message,false); return; }
 
-  // 단계 완료 체크 시 stage_completions upsert
+  // 단계 완료 체크 시 stage_completions upsert (1단계 ~ 선택 단계까지 모두)
   if (stageComplete && unitId && stage) {
-    await sb.from('stage_completions').upsert(
-      {unit_id:unitId, stage, completed_at:new Date().toISOString()},
-      {onConflict:'unit_id,stage'}
-    );
+    const now = new Date().toISOString();
+    const rows = [];
+    for (let s = 1; s <= stage; s++) rows.push({unit_id:unitId, stage:s, completed_at:now});
+    await sb.from('stage_completions').upsert(rows, {onConflict:'unit_id,stage'});
     if (!completedStagesByUnit[unitId]) completedStagesByUnit[unitId] = new Set();
-    completedStagesByUnit[unitId].add(stage);
+    for (let s = 1; s <= stage; s++) completedStagesByUnit[unitId].add(s);
   }
 
   // 폼 초기화
@@ -1657,12 +1657,12 @@ async function saveEditLog(id, fromProjectId='', fromUnitId='') {
   if (stageCompleteChk && unitId && stage) {
     const isComplete = stageCompleteChk.checked;
     if (isComplete) {
-      await sb.from('stage_completions').upsert(
-        {unit_id:unitId, stage, completed_at:new Date().toISOString()},
-        {onConflict:'unit_id,stage'}
-      );
+      const now = new Date().toISOString();
+      const rows = [];
+      for (let s = 1; s <= stage; s++) rows.push({unit_id:unitId, stage:s, completed_at:now});
+      await sb.from('stage_completions').upsert(rows, {onConflict:'unit_id,stage'});
       if (!completedStagesByUnit[unitId]) completedStagesByUnit[unitId] = new Set();
-      completedStagesByUnit[unitId].add(stage);
+      for (let s = 1; s <= stage; s++) completedStagesByUnit[unitId].add(s);
     } else {
       await sb.from('stage_completions').delete().eq('unit_id',unitId).eq('stage',stage);
       if (completedStagesByUnit[unitId]) completedStagesByUnit[unitId].delete(stage);
