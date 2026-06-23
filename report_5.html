@@ -362,14 +362,7 @@ function buildFabMap(){
     completedStages.forEach(s=>{
       const subs=SUB_STAGES[s]||[];
       if(!subs.length)return;
-      if(s===5){
-        // 5단계: multi-select이므로 실기록 우선, 없으면 전체 완료로 간주
-        const has5=subs.some(sub=>recorded.has(sub.id));
-        if(has5) subs.forEach(sub=>{if(recorded.has(sub.id))eff.add(sub.id);});
-        else subs.forEach(sub=>eff.add(sub.id));
-      } else {
-        subs.forEach(sub=>eff.add(sub.id));
-      }
+      subs.forEach(sub=>eff.add(sub.id));
     });
     // work_logs 기준: stage_completions에 없는 단계도 기존 방식으로 처리
     const stagesWithLog=new Set(allLogs.filter(l=>l.unit_id===unitId&&l.stage>0).map(l=>l.stage));
