@@ -211,7 +211,17 @@
       </div>
       <div class="form-group">
         <label>프로젝트 선택</label>
-        <select id="log-project" onchange="onProjectChange()"></select>
+        <div style="position:relative">
+          <input id="log-project-search" type="text" placeholder="프로젝트명 또는 코드 검색..." autocomplete="off"
+            oninput="filterProjectList()"
+            onfocus="showProjectDropdown()"
+            onkeydown="onProjectSearchKey(event)"
+            style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:14px;box-sizing:border-box" />
+          <input type="hidden" id="log-project" />
+          <div id="project-dropdown"
+            style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1.5px solid var(--border);border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.10);z-index:200;max-height:220px;overflow-y:auto">
+          </div>
+        </div>
       </div>
       <div class="form-group" id="unit-group">
         <label>호기 선택 <span style="font-weight:400;color:var(--muted)">(PJT 관리에서 호기를 먼저 추가해 주세요)</span></label>
@@ -274,18 +284,23 @@
         <textarea id="log-content" placeholder="오늘 수행한 작업 내용을 입력해 주세요"></textarea>
       </div>
       <div class="form-group">
-        <label>이슈 발생 구분 <span style="font-weight:400;color:var(--muted)">(이슈 없으면 선택 불필요)</span></label>
-        <select id="log-issue-type">
-          <option value="">구분 선택</option>
-          <option value="하드웨어_원자재">하드웨어_원자재</option>
-          <option value="하드웨어_휴먼">하드웨어_휴먼</option>
-          <option value="소프트웨어">소프트웨어</option>
-          <option value="기타">기타</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>이슈사항 <span style="font-weight:400;color:var(--muted)">(없으면 비워두세요)</span></label>
-        <textarea id="log-issue" placeholder="작업 중 발생한 이슈를 입력해 주세요" style="min-height:60px"></textarea>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <label style="margin-bottom:0">이슈사항 <span style="font-weight:400;color:var(--muted)">(없으면 비워두세요)</span></label>
+          <button type="button" onclick="addIssueRow()" style="padding:4px 10px;font-size:12px;font-weight:600;background:#FEF3C7;border:1.5px solid #FCD34D;border-radius:8px;color:#92400E;cursor:pointer">+ 이슈 추가</button>
+        </div>
+        <div id="issue-rows-wrap">
+          <div class="issue-row" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">
+            <select class="issue-type-sel" style="flex-shrink:0;width:150px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">
+              <option value="">구분 선택</option>
+              <option value="하드웨어_원자재">하드웨어_원자재</option>
+              <option value="하드웨어_휴먼">하드웨어_휴먼</option>
+              <option value="소프트웨어">소프트웨어</option>
+              <option value="기타">기타</option>
+            </select>
+            <textarea class="issue-text-inp" placeholder="이슈 내용 입력" style="flex:1;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+            <button type="button" onclick="removeIssueRow(this)" style="flex-shrink:0;padding:6px 8px;font-size:14px;background:none;border:none;color:#94A3B8;cursor:pointer;margin-top:2px" title="삭제">✕</button>
+          </div>
+        </div>
       </div>
       <div class="form-group">
         <label>날짜</label>
@@ -773,11 +788,80 @@ async function loadProjects() {
 }
 
 function loadProjectSelect() {
-  const sel = document.getElementById('log-project');
-  sel.innerHTML = projects.length
-    ? projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')
-    : '<option disabled>프로젝트를 먼저 추가해 주세요</option>';
+  // 검색창 초기화 (기존 선택값 유지)
+  const hiddenInput = document.getElementById('log-project');
+  if (!hiddenInput.value) {
+    document.getElementById('log-project-search').value = '';
+  }
   onProjectChange();
+}
+
+function filterProjectList() {
+  showProjectDropdown();
+  // 검색어가 바뀌면 선택 해제
+  const hiddenInput = document.getElementById('log-project');
+  hiddenInput.value = '';
+  onProjectChange();
+}
+
+function showProjectDropdown() {
+  const q = (document.getElementById('log-project-search').value || '').trim().toLowerCase();
+  const dd = document.getElementById('project-dropdown');
+  if (!projects.length) { dd.style.display='none'; return; }
+
+  const filtered = q
+    ? projects.filter(p => p.name.toLowerCase().includes(q) || (p.code||p.name).toLowerCase().includes(q))
+    : projects;
+
+  if (!filtered.length) {
+    dd.innerHTML = '<div style="padding:10px 14px;color:#94A3B8;font-size:13px">검색 결과 없음</div>';
+    dd.style.display = 'block';
+    return;
+  }
+
+  dd.innerHTML = filtered.map(p =>
+    `<div class="pj-item" data-id="${p.id}"
+      onmousedown="selectProjectById(this)"
+      style="padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #F1F5F9;transition:background .12s"
+      onmouseover="this.style.background='#F0F9FF'" onmouseout="this.style.background=''">
+      ${p.name}
+    </div>`
+  ).join('');
+  dd.style.display = 'block';
+}
+
+function selectProjectById(el) {
+  const id = el.dataset.id;
+  const p = projects.find(p => p.id === id);
+  if (!p) return;
+  document.getElementById('log-project').value = p.id;
+  document.getElementById('log-project-search').value = p.name;
+  document.getElementById('project-dropdown').style.display = 'none';
+  onProjectChange();
+}
+
+function hideProjectDropdown() {
+  document.getElementById('project-dropdown').style.display = 'none';
+}
+
+function onProjectSearchKey(e) {
+  const dd = document.getElementById('project-dropdown');
+  const items = dd.querySelectorAll('.pj-item');
+  const active = dd.querySelector('.pj-item.active');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    const next = active ? active.nextElementSibling : items[0];
+    if (next) { active && active.classList.remove('active'); next.classList.add('active'); next.style.background='#E0F2FE'; if(active)active.style.background=''; next.scrollIntoView({block:'nearest'}); }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    const prev = active ? active.previousElementSibling : items[items.length-1];
+    if (prev) { active && active.classList.remove('active'); prev.classList.add('active'); prev.style.background='#E0F2FE'; if(active)active.style.background=''; prev.scrollIntoView({block:'nearest'}); }
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (active) active.dispatchEvent(new MouseEvent('mousedown'));
+  } else if (e.key === 'Escape') {
+    hideProjectDropdown();
+  }
 }
 
 async function loadAllUnits() {
@@ -1138,8 +1222,8 @@ async function submitMultiComplete(mode) {
   const projectId = document.getElementById('log-project').value;
   const content = document.getElementById('log-content').value.trim();
   const date = document.getElementById('log-date').value;
-  const issue = document.getElementById('log-issue')?.value.trim() || '';
-  const issueType = document.getElementById('log-issue-type')?.value || '';
+  const issueRows = getIssueRows();
+  const firstIssue = issueRows[0] || { issue_type: '', issue: '' };
   const unitId = document.getElementById('log-unit')?.value || null;
 
   if (!projectId) { showMsg('log-msg','프로젝트를 선택해 주세요',false); return; }
@@ -1193,8 +1277,17 @@ async function submitMultiComplete(mode) {
     author_name: currentUserName,
     content: `${modeLabel} ${subStageId} (${selectedItems})`,
     log_date: date, stage: 5, sub_stage: subStageId,
-    issue: '', issue_type: '', unit_id: unitId,
+    issue: firstIssue.issue, issue_type: firstIssue.issue_type, unit_id: unitId,
   });
+  // 추가 이슈 행 저장
+  if (issueRows.length > 1) {
+    const extraRows = issueRows.slice(1).map(r => ({
+      project_id: projectId, user_id: currentUser.id,
+      author_name: currentUserName, content: '', log_date: date,
+      stage: 5, sub_stage: subStageId, issue: r.issue, issue_type: r.issue_type, unit_id: unitId,
+    }));
+    await sb.from('work_logs').insert(extraRows);
+  }
 
   // 리셋
   document.getElementById('log-content').value = '';
@@ -1207,8 +1300,7 @@ async function submitMultiComplete(mode) {
   const partialBtn = document.getElementById('multi-partial-btn');
   if (partialBtn) partialBtn.style.display = 'none';
   document.getElementById('log-sub-stage').value = '';
-  if (document.getElementById('log-issue')) document.getElementById('log-issue').value = '';
-  if (document.getElementById('log-issue-type')) document.getElementById('log-issue-type').value = '';
+  resetIssueRows();
   const hint = document.getElementById('multi-hint');
   if (hint) hint.textContent = '※ 항목을 선택하면 완료 버튼이 나타납니다';
   showMsg('log-msg', mode === 'partial' ? '부분 완료 처리됐어요! ✓' : '저장됐어요! ✓', true);
@@ -1277,26 +1369,91 @@ ${names}
 ${names}`);
 }
 
+// ── 이슈 행 관리 ──
+const ISSUE_TYPE_OPTIONS = `
+  <option value="">구분 선택</option>
+  <option value="하드웨어_원자재">하드웨어_원자재</option>
+  <option value="하드웨어_휴먼">하드웨어_휴먼</option>
+  <option value="소프트웨어">소프트웨어</option>
+  <option value="기타">기타</option>`;
+
+function addIssueRow() {
+  const wrap = document.getElementById('issue-rows-wrap');
+  const row = document.createElement('div');
+  row.className = 'issue-row';
+  row.style.cssText = 'display:flex;gap:8px;align-items:flex-start;margin-bottom:6px';
+  row.innerHTML = `
+    <select class="issue-type-sel" style="flex-shrink:0;width:150px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">${ISSUE_TYPE_OPTIONS}</select>
+    <textarea class="issue-text-inp" placeholder="이슈 내용 입력" style="flex:1;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+    <button type="button" onclick="removeIssueRow(this)" style="flex-shrink:0;padding:6px 8px;font-size:14px;background:none;border:none;color:#94A3B8;cursor:pointer;margin-top:2px" title="삭제">✕</button>`;
+  wrap.appendChild(row);
+}
+
+function removeIssueRow(btn) {
+  const wrap = document.getElementById('issue-rows-wrap');
+  const rows = wrap.querySelectorAll('.issue-row');
+  if (rows.length <= 1) {
+    // 마지막 행은 삭제 대신 초기화
+    btn.closest('.issue-row').querySelector('.issue-type-sel').value = '';
+    btn.closest('.issue-row').querySelector('.issue-text-inp').value = '';
+    return;
+  }
+  btn.closest('.issue-row').remove();
+}
+
+function getIssueRows() {
+  const rows = document.querySelectorAll('#issue-rows-wrap .issue-row');
+  const result = [];
+  rows.forEach(row => {
+    const type = row.querySelector('.issue-type-sel').value.trim();
+    const text = row.querySelector('.issue-text-inp').value.trim();
+    if (text) result.push({ issue_type: type, issue: text });
+  });
+  return result;
+}
+
+function resetIssueRows() {
+  const wrap = document.getElementById('issue-rows-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = `
+    <div class="issue-row" style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">
+      <select class="issue-type-sel" style="flex-shrink:0;width:150px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px">${ISSUE_TYPE_OPTIONS}</select>
+      <textarea class="issue-text-inp" placeholder="이슈 내용 입력" style="flex:1;min-height:60px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+      <button type="button" onclick="removeIssueRow(this)" style="flex-shrink:0;padding:6px 8px;font-size:14px;background:none;border:none;color:#94A3B8;cursor:pointer;margin-top:2px" title="삭제">✕</button>
+    </div>`;
+}
+
 async function submitLog() {
   const projectId = document.getElementById('log-project').value;
   const stage = parseInt(document.getElementById('log-stage').value) || 0;
   const content = document.getElementById('log-content').value.trim();
-  const issue = document.getElementById('log-issue')?.value.trim() || '';
-  const issueType = document.getElementById('log-issue-type')?.value || '';
   const date = document.getElementById('log-date').value;
   const stageComplete = document.getElementById('log-stage-complete')?.checked || false;
+  const issueRows = getIssueRows(); // [{issue_type, issue}, ...]
 
   if (!projectId) { showMsg('log-msg','프로젝트를 선택해 주세요',false); return; }
   if (!content) { showMsg('log-msg','작업 내용을 입력해 주세요',false); return; }
 
   const unitId = document.getElementById('log-unit')?.value || null;
   const subStage = document.getElementById('log-sub-stage')?.value || null;
+  // 첫 번째 이슈를 메인 행에, 추가 이슈는 별도 행으로 저장
+  const firstIssue = issueRows[0] || { issue_type: '', issue: '' };
   const {error} = await sb.from('work_logs').insert({
     project_id:projectId, user_id:currentUser.id,
     author_name:currentUserName, content, log_date:date,
-    stage, sub_stage: subStage, issue, issue_type: issueType, unit_id: unitId,
+    stage, sub_stage: subStage, issue: firstIssue.issue, issue_type: firstIssue.issue_type, unit_id: unitId,
   });
   if (error) { showMsg('log-msg','저장 실패: '+error.message,false); return; }
+  // 추가 이슈 행 저장 (2번째~)
+  if (issueRows.length > 1) {
+    const extraRows = issueRows.slice(1).map(r => ({
+      project_id:projectId, user_id:currentUser.id,
+      author_name:currentUserName, content:'', log_date:date,
+      stage, sub_stage: subStage, issue: r.issue, issue_type: r.issue_type, unit_id: unitId,
+    }));
+    const {error:e2} = await sb.from('work_logs').insert(extraRows);
+    if (e2) { showMsg('log-msg','추가 이슈 저장 실패: '+e2.message,false); return; }
+  }
 
   // 단계 완료 체크 시 stage_completions upsert (1단계 ~ 선택 단계까지 모두)
   if (stageComplete && unitId && stage) {
@@ -1326,6 +1483,11 @@ async function submitLog() {
   if (prevBtn) { prevBtn.disabled = false; prevBtn.style.opacity = '1'; }
   const prevHint = document.getElementById('prev-stage-complete-hint');
   if (prevHint) prevHint.textContent = '';
+  // 프로젝트 검색창 초기화
+  const pjSearch = document.getElementById('log-project-search');
+  if (pjSearch) pjSearch.value = '';
+  document.getElementById('log-project').value = '';
+  hideProjectDropdown();
 
   showMsg('log-msg','저장됐어요! ✓',true);
   await loadMyRecentLogs();
@@ -3684,6 +3846,11 @@ function showMsg(id, msg, ok) {
   else show('login-screen');
   sb.auth.onAuthStateChange((_e,session)=>{
     if (!session && !document.getElementById('app-screen').classList.contains('hidden')) location.reload();
+  });
+  // 프로젝트 검색 드롭다운 외부 클릭 시 닫기
+  document.addEventListener('click', e => {
+    const wrap = document.getElementById('log-project-search')?.closest('.form-group');
+    if (wrap && !wrap.contains(e.target)) hideProjectDropdown();
   });
 })();
 </script>
