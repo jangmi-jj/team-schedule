@@ -1868,18 +1868,11 @@ async function loadFabSummary() {
     const effective = new Set();
     const completedStages = completedStagesByUnit[unitId] || new Set();
 
-    // 1순위: stage_completions 기준
+    // 1순위: stage_completions 기준 → 완료된 단계는 세부항목 전체 완료
     completedStages.forEach(s => {
       const subs = SUB_STAGES[s] || [];
       if (!subs.length) return;
-      if (s === 5) {
-        // 5단계: 실기록 있으면 우선, 없으면 전체 완료
-        const has5 = subs.some(sub => recorded.has(sub.id));
-        if (has5) subs.forEach(sub => { if (recorded.has(sub.id)) effective.add(sub.id); });
-        else subs.forEach(sub => effective.add(sub.id));
-      } else {
-        subs.forEach(sub => effective.add(sub.id));
-      }
+      subs.forEach(sub => effective.add(sub.id));
     });
 
     // 2순위: work_logs 기준 (stage_completions에 없는 단계만)
