@@ -263,6 +263,10 @@
               <div style="font-size:11px;color:#059669;font-weight:400;margin-top:2px">체크하면 진행률에 이 단계까지 반영돼요</div>
             </div>
           </label>
+          <button type="button" id="prev-stage-complete-btn" onclick="completePrevStages()"
+            style="margin-top:8px;width:100%;padding:9px 12px;background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:10px;color:#1D4ED8;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+            ⏮ 이전 단계까지만 완료 처리 <span id="prev-stage-complete-hint" style="font-size:11px;font-weight:400;color:#3B82F6"></span>
+          </button>
         </div>
       </div>
       <div class="form-group">
@@ -979,6 +983,21 @@ function updateProgressPreview() {
       if (completeChk) completeChk.checked = true;
       if (completeLabel) { completeLabel.style.background='#D1FAE5'; completeLabel.style.borderColor='#10B981'; }
     }
+    // 이전단계 버튼 힌트 업데이트
+    const prevBtn = document.getElementById('prev-stage-complete-btn');
+    const prevHint = document.getElementById('prev-stage-complete-hint');
+    if (prevBtn && stage > 1) {
+      prevBtn.style.display = 'block';
+      const uid = document.getElementById('log-unit')?.value;
+      const completed = completedStagesByUnit[uid] || new Set();
+      const missing = [];
+      for (let s = 1; s < stage; s++) if (!completed.has(s)) missing.push(s+'단계');
+      if (prevHint) prevHint.textContent = missing.length ? `(미완료: ${missing.join(', ')})` : '(이전 단계 모두 완료됨)';
+      prevBtn.disabled = missing.length === 0;
+      prevBtn.style.opacity = missing.length === 0 ? '0.45' : '1';
+    } else if (prevBtn) {
+      prevBtn.style.display = stage <= 1 ? 'none' : 'block';
+    }
   }
 }
 
@@ -1196,6 +1215,68 @@ async function submitMultiComplete(mode) {
   await loadMyRecentLogs();
 }
 
+// ── 이전 단계까지만 완료 처리 (신규 폼) ──
+async function completePrevStages() {
+  const stage = parseInt(document.getElementById('log-stage').value);
+  const unitId = document.getElementById('log-unit')?.value;
+  if (!unitId || !stage || stage <= 1) { alert('호기와 단계를 먼저 선택해 주세요.'); return; }
+
+  const completed = completedStagesByUnit[unitId] || new Set();
+  const missing = [];
+  for (let s = 1; s < stage; s++) if (!completed.has(s)) missing.push(s);
+  if (missing.length === 0) { alert('이전 단계가 모두 이미 완료 처리되어 있어요.'); return; }
+
+  const names = missing.map(s => `${s}단계(${STAGE_NAMES[s]})`).join(', ');
+  if (!confirm(`다음 단계를 완료 처리합니다:
+${names}
+
+계속하시겠습니까?`)) return;
+
+  const now = new Date().toISOString();
+  const rows = missing.map(s => ({unit_id:unitId, stage:s, completed_at:now}));
+  const {error} = await sb.from('stage_completions').upsert(rows, {onConflict:'unit_id,stage'});
+  if (error) { alert('저장 실패: ' + error.message); return; }
+
+  if (!completedStagesByUnit[unitId]) completedStagesByUnit[unitId] = new Set();
+  missing.forEach(s => completedStagesByUnit[unitId].add(s));
+
+  // 버튼 힌트 갱신
+  const prevHint = document.getElementById('prev-stage-complete-hint');
+  if (prevHint) prevHint.textContent = '(이전 단계 모두 완료됨)';
+  const prevBtn = document.getElementById('prev-stage-complete-btn');
+  if (prevBtn) { prevBtn.disabled = true; prevBtn.style.opacity = '0.45'; }
+
+  showMsg('log-msg', `이전 단계 완료 처리됐어요! (${names}) ✓`, true);
+}
+
+// ── 이전 단계까지만 완료 처리 (수정 모달) ──
+async function completePrevStagesEdit(unitId, stage) {
+  stage = parseInt(stage);
+  if (!unitId || !stage || stage <= 1) { alert('이전 단계가 없습니다.'); return; }
+
+  const completed = completedStagesByUnit[unitId] || new Set();
+  const missing = [];
+  for (let s = 1; s < stage; s++) if (!completed.has(s)) missing.push(s);
+  if (missing.length === 0) { alert('이전 단계가 모두 이미 완료 처리되어 있어요.'); return; }
+
+  const names = missing.map(s => `${s}단계(${STAGE_NAMES[s]})`).join(', ');
+  if (!confirm(`다음 단계를 완료 처리합니다:
+${names}
+
+계속하시겠습니까?`)) return;
+
+  const now = new Date().toISOString();
+  const rows = missing.map(s => ({unit_id:unitId, stage:s, completed_at:now}));
+  const {error} = await sb.from('stage_completions').upsert(rows, {onConflict:'unit_id,stage'});
+  if (error) { alert('저장 실패: ' + error.message); return; }
+
+  if (!completedStagesByUnit[unitId]) completedStagesByUnit[unitId] = new Set();
+  missing.forEach(s => completedStagesByUnit[unitId].add(s));
+
+  alert(`완료 처리됐어요!
+${names}`);
+}
+
 async function submitLog() {
   const projectId = document.getElementById('log-project').value;
   const stage = parseInt(document.getElementById('log-stage').value) || 0;
@@ -1241,6 +1322,10 @@ async function submitLog() {
   if (completeGroup) completeGroup.style.display='none';
   const completeLabel = document.getElementById('stage-complete-label');
   if (completeLabel) { completeLabel.style.background='#F0FDF4'; completeLabel.style.borderColor='#BBF7D0'; }
+  const prevBtn = document.getElementById('prev-stage-complete-btn');
+  if (prevBtn) { prevBtn.disabled = false; prevBtn.style.opacity = '1'; }
+  const prevHint = document.getElementById('prev-stage-complete-hint');
+  if (prevHint) prevHint.textContent = '';
 
   showMsg('log-msg','저장됐어요! ✓',true);
   await loadMyRecentLogs();
@@ -1409,6 +1494,10 @@ async function openEditLogModal(id, fromProjectId='', fromUnitId='') {
           <div style="font-size:11px;color:#059669;font-weight:400;margin-top:2px">체크하면 진행률에 이 단계까지 반영돼요</div>
         </div>
       </label>
+      <button type="button" onclick="completePrevStagesEdit('${log.unit_id}',${log.stage})"
+        style="margin-top:8px;width:100%;padding:9px 12px;background:#EFF6FF;border:1.5px solid #BFDBFE;border-radius:10px;color:#1D4ED8;font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+        ⏮ 이전 단계까지만 완료 처리 <span style="font-size:11px;font-weight:400;color:#3B82F6">(1~${log.stage-1}단계 중 미완료만)</span>
+      </button>
     </div>
 
     <div class="modal-actions" style="margin-top:14px">
@@ -1771,29 +1860,39 @@ async function loadFabSummary() {
     }
   });
 
-  // 절충안: sub_stage 기록이 하나도 없는 단계 → 해당 단계 100% 완료로 간주
-  //         sub_stage 기록이 하나라도 있는 단계 → 기록된 것만 완료로 계산
+  // 세부단계 완료 판단:
+  // 1) stage_completions에 완료 기록 있는 단계 → 세부항목 전체 완료로 간주 (5단계는 실기록 우선)
+  // 2) work_logs에만 있는 단계 → 기존 절충안 유지
   function buildEffectiveSubStages(unitId) {
     const recorded = subStagesByUnit[unitId] || new Set();
     const effective = new Set();
+    const completedStages = completedStagesByUnit[unitId] || new Set();
 
-    // 5단계: '5-1', '5-2' (완료 확정 행)만 완료로 인정
-    // 그 외 단계: 기존 절충안 유지
+    // 1순위: stage_completions 기준
+    completedStages.forEach(s => {
+      const subs = SUB_STAGES[s] || [];
+      if (!subs.length) return;
+      if (s === 5) {
+        // 5단계: 실기록 있으면 우선, 없으면 전체 완료
+        const has5 = subs.some(sub => recorded.has(sub.id));
+        if (has5) subs.forEach(sub => { if (recorded.has(sub.id)) effective.add(sub.id); });
+        else subs.forEach(sub => effective.add(sub.id));
+      } else {
+        subs.forEach(sub => effective.add(sub.id));
+      }
+    });
+
+    // 2순위: work_logs 기준 (stage_completions에 없는 단계만)
     const stagesWithLog = new Set(
       (logs||[]).filter(l => l.unit_id === unitId && l.stage > 0).map(l => l.stage)
     );
-
     stagesWithLog.forEach(s => {
+      if (completedStages.has(s)) return; // 이미 처리됨
       const subs = SUB_STAGES[s] || [];
       if (!subs.length) return;
-
       if (s === 5) {
-        // 5단계: '5-1', '5-2' 완료 확정 행이 recorded에 있을 때만 완료
-        subs.forEach(sub => {
-          if (recorded.has(sub.id)) effective.add(sub.id);
-        });
+        subs.forEach(sub => { if (recorded.has(sub.id)) effective.add(sub.id); });
       } else {
-        // 그 외: sub_stage 기록 없으면 전부 완료, 있으면 기록된 것만
         const hasAnySubRecord = [...recorded].some(id => id.startsWith(s + '-') && !id.includes('::'));
         if (!hasAnySubRecord) {
           subs.forEach(sub => effective.add(sub.id));
