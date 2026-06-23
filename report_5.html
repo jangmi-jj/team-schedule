@@ -350,19 +350,36 @@ function buildFabMap(){
     if(!subStagesByUnit[l.unit_id])subStagesByUnit[l.unit_id]=new Set();
     subStagesByUnit[l.unit_id].add(l.sub_stage);
   });
-  // 절충안: sub_stage 기록 없는 단계는 전부 완료로 간주
+  // 세부단계 완료 판단:
+  // 1) stage_completions에 완료 기록 있는 단계 → 해당 단계 세부항목 전체 완료로 간주 (단, 5단계는 work_logs 실기록 우선)
+  // 2) work_logs에 sub_stage 기록 없는 단계 → 전부 완료로 간주
+  // 3) work_logs에 sub_stage 기록 있는 단계 → 기록된 것만 완료
   function effectiveSubs(unitId){
     const recorded=subStagesByUnit[unitId]||new Set();
     const eff=new Set();
-    const stagesWithLog=new Set(allLogs.filter(l=>l.unit_id===unitId&&l.stage>0).map(l=>l.stage));
-    stagesWithLog.forEach(s=>{
+    const completedStages=completedStagesByUnit[unitId]||new Set();
+    // stage_completions 기준: 완료된 단계의 세부항목은 모두 완료 처리
+    completedStages.forEach(s=>{
       const subs=SUB_STAGES[s]||[];
       if(!subs.length)return;
       if(s===5){
-        // 5단계: '5-1','5-2' 완료 확정 행만 완료로 인정
+        // 5단계: multi-select이므로 실기록 우선, 없으면 전체 완료로 간주
+        const has5=subs.some(sub=>recorded.has(sub.id));
+        if(has5) subs.forEach(sub=>{if(recorded.has(sub.id))eff.add(sub.id);});
+        else subs.forEach(sub=>eff.add(sub.id));
+      } else {
+        subs.forEach(sub=>eff.add(sub.id));
+      }
+    });
+    // work_logs 기준: stage_completions에 없는 단계도 기존 방식으로 처리
+    const stagesWithLog=new Set(allLogs.filter(l=>l.unit_id===unitId&&l.stage>0).map(l=>l.stage));
+    stagesWithLog.forEach(s=>{
+      if(completedStages.has(s))return; // 이미 위에서 처리됨
+      const subs=SUB_STAGES[s]||[];
+      if(!subs.length)return;
+      if(s===5){
         subs.forEach(sub=>{if(recorded.has(sub.id))eff.add(sub.id);});
       } else {
-        // 그 외: sub_stage 기록 없으면 전부 완료, 있으면 기록된 것만
         const hasAny=[...recorded].some(id=>id.startsWith(s+'-')&&!id.includes('::'));
         if(!hasAny)subs.forEach(sub=>eff.add(sub.id));
         else subs.forEach(sub=>{if(recorded.has(sub.id))eff.add(sub.id);});
