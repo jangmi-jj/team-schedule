@@ -49,7 +49,7 @@
     .app-header h2 { font-size: 17px; font-weight: 800; }
     .header-right { display: flex; align-items: center; gap: 10px; }
     .user-chip { font-size: 12px; background: var(--primary-light); color: var(--primary); padding: 4px 10px; border-radius: 20px; font-weight: 700; }
-    .tab-nav { display: flex; background: var(--card); border-bottom: 1px solid var(--border); overflow-x: auto; }
+    .tab-nav { display: flex; background: var(--card); border-bottom: 1px solid var(--border); overflow-x: auto; position: sticky; top: 46px; z-index: 99; }
     .tab-nav button { flex: 1; min-width: 90px; padding: 13px 8px; border: none; background: transparent; font-size: 12px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2.5px solid transparent; transition: all .15s; white-space: nowrap; }
     .tab-nav button.active { color: var(--primary); border-bottom-color: var(--primary); }
     .tab-content { flex: 1; padding: 18px; max-width: 760px; width: 100%; margin: 0 auto; }
