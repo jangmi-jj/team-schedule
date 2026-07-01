@@ -1,0 +1,2247 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PJT 관리</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --primary: #4F46E5; --primary-light: #EEF2FF;
+      --danger: #EF4444; --success: #10B981; --warning: #F59E0B;
+      --bg: #F8FAFC; --card: #FFFFFF;
+      --text: #1E293B; --muted: #94A3B8; --border: #E2E8F0;
+    }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    .hidden { display: none !important; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 18px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; transition: all .15s; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: #4338CA; }
+    .btn-outline { background: transparent; color: var(--primary); border: 1.5px solid var(--primary); }
+    .btn-outline:hover { background: var(--primary-light); }
+    .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+    input[type="text"], input[type="email"], input[type="password"], input[type="date"], select, textarea {
+      width: 100%; padding: 9px 12px; border: 1.5px solid var(--border); border-radius: 8px;
+      font-size: 13px; background: #fff; color: var(--text); outline: none; transition: border-color .15s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+
+    .app-header { background: var(--card); border-bottom: 1px solid var(--border); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+    .app-header h2 { font-size: 16px; font-weight: 700; }
+    .header-right { display: flex; align-items: center; gap: 10px; }
+    .tab-nav { background: var(--card); border-bottom: 1px solid var(--border); display: flex; padding: 0 20px; gap: 4px; position: sticky; top: 53px; z-index: 99; }
+    .tab-nav button { padding: 12px 18px; border: none; background: none; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2.5px solid transparent; transition: all .15s; }
+    .tab-nav button.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .tab-content { padding: 20px; max-width: 1400px; margin: 0 auto; }
+
+    /* 현황 테이블 */
+    .summary-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 20px; }
+    .summary-card-title { font-size: 14px; font-weight: 700; padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .summary-scroll { overflow-x: auto; }
+    .summary-table { border-collapse: collapse; font-size: 12px; width: 100%; }
+    .summary-table th { background: #4F46E5; color: #fff; padding: 9px 10px; text-align: center; border: 1px solid #6366F1; white-space: nowrap; font-size: 11px; font-weight: 700; }
+    .summary-table th.th-left { text-align: left; padding-left: 16px; min-width: 180px; }
+    .summary-table th.th-total { min-width: 80px; }
+    .summary-table th.th-phase { min-width: 100px; }
+    .summary-table th.th-sub { background: #6366F1; min-width: 110px; font-size: 10px; cursor: pointer; }
+    .summary-table th.th-sub:hover { background: #4F46E5; }
+    .summary-table tbody tr { cursor: pointer; transition: background .12s; }
+    .summary-table tbody tr:hover td { background: #F0F0FF !important; }
+    .summary-table tbody td { padding: 10px 8px; text-align: center; border: 1px solid #E2E8F0; vertical-align: middle; }
+    .summary-table tbody td.td-proj { text-align: left; padding-left: 16px; font-weight: 700; font-size: 13px; white-space: normal; }
+    .proj-info-tag { display: inline-flex; align-items: center; font-size: 10px; font-weight: 600; color: var(--muted); background: #F1F5F9; padding: 1px 6px; border-radius: 5px; white-space: nowrap; }
+    .proj-info-tag.cert { color: #4F46E5; background: var(--primary-light); }
+    .pct-wrap { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .pct-bar { width: 60px; height: 5px; background: #E2E8F0; border-radius: 3px; overflow: hidden; }
+    .pct-fill { height: 100%; border-radius: 3px; }
+    .phase-date-cell { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+    .date-tag { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+    .date-tag.target { background: #EEF2FF; color: #4F46E5; }
+    .date-tag.done   { background: #D1FAE5; color: #065F46; }
+
+    /* 필터 바 */
+    .filter-bar { padding: 10px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: #FAFBFF; }
+    .filter-bar-label { font-size: 11px; font-weight: 700; color: var(--muted); white-space: nowrap; }
+    .filter-divider { width: 1px; height: 20px; background: var(--border); margin: 0 2px; }
+    .filter-select { padding: 4px 8px; border-radius: 8px; border: 1.5px solid var(--border); background: #fff; font-size: 11px; font-weight: 600; color: var(--text); cursor: pointer; outline: none; width: auto; }
+    .filter-select.active { border-color: var(--primary); color: var(--primary); background: var(--primary-light); }
+    .filter-btn { padding: 4px 10px; border-radius: 20px; border: 1.5px solid var(--border); background: #fff; font-size: 11px; font-weight: 600; cursor: pointer; color: var(--muted); transition: all .15s; white-space: nowrap; }
+    .filter-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .filter-btn.all.active { background: #1E293B; border-color: #1E293B; }
+
+    /* 관리탭 */
+    .project-bar { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .project-bar label { font-size: 13px; font-weight: 600; white-space: nowrap; }
+    .project-bar select { max-width: 300px; }
+    .total-progress-bar { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 20px; margin-bottom: 16px; display: flex; align-items: center; gap: 16px; }
+    .total-pct-num { font-size: 26px; font-weight: 700; color: var(--primary); min-width: 60px; }
+    .total-bar-bg { flex: 1; height: 8px; background: var(--border); border-radius: 5px; overflow: hidden; }
+    .total-bar-fill { height: 100%; border-radius: 5px; background: var(--primary); transition: width .4s; }
+    .total-bar-label { font-size: 12px; color: var(--muted); }
+
+    /* 담당자 카드 */
+    .mg-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 16px; overflow: hidden; }
+    .mg-card-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 1px solid var(--border); background: #FAFBFF; }
+    .mg-card-title { font-size: 13px; font-weight: 700; }
+    .assignee-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 12px; padding: 14px 18px; }
+    .assignee-item { display: flex; flex-direction: column; gap: 3px; }
+    .assignee-item label { font-size: 11px; font-weight: 700; color: var(--muted); }
+    .assignee-val { font-size: 13px; font-weight: 600; }
+    .assignee-val.empty { color: var(--muted); font-weight: 400; font-style: italic; }
+
+    /* 일정 테이블 */
+    .schedule-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 16px; }
+    .schedule-scroll { overflow-x: auto; }
+    .schedule-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 800px; }
+    .schedule-table thead th { background: #4F46E5; color: #fff; padding: 10px 12px; font-size: 11px; font-weight: 700; text-align: center; border: 1px solid #6366F1; white-space: nowrap; }
+    .schedule-table thead th.th-name { text-align: left; min-width: 200px; }
+    .schedule-table tbody td { padding: 9px 12px; border: 1px solid #F1F5F9; vertical-align: middle; }
+    .row-phase td { background: #F1F5FF; font-weight: 700; }
+    .row-sub td { background: #fff; }
+    .row-sub td.sub-label { padding-left: 28px; font-size: 12px; }
+    .row-done td { opacity: .65; }
+    .row-done .sub-label { text-decoration: line-through; color: var(--muted); }
+    .date-inp { border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; font-size: 12px; color: var(--text); background: #fff; cursor: pointer; outline: none; width: 118px; }
+    .date-inp:hover, .date-inp:focus { border-color: var(--primary); }
+    .chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+    .chip-over  { background: #FEE2E2; color: #991B1B; }
+    .chip-exact { background: #D1FAE5; color: #065F46; }
+    .chip-early { background: #DBEAFE; color: #1E40AF; }
+    .done-chk { width: 15px; height: 15px; cursor: pointer; accent-color: var(--success); }
+
+    /* 공통 버튼 */
+    .edit-btn   { font-size: 11px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--border); background: #fff; cursor: pointer; color: var(--muted); }
+    .edit-btn:hover { border-color: var(--primary); color: var(--primary); }
+    .save-btn   { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: none; background: var(--primary); color: #fff; cursor: pointer; }
+    .cancel-btn { font-size: 11px; padding: 4px 10px; border-radius: 6px; border: 1px solid var(--border); background: #fff; cursor: pointer; color: var(--muted); }
+    .loading-text { text-align: center; padding: 40px; color: var(--muted); font-size: 14px; }
+
+    /* 인원 관리 */
+    .member-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+    .member-card { background: #F8FAFC; border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+    .member-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .member-info { flex: 1; min-width: 0; }
+    .member-name { font-size: 13px; font-weight: 700; }
+    .member-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .member-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+    .badge-manager { background: #EEF2FF; color: #4F46E5; }
+    .badge-worker  { background: #F0FDF4; color: #065F46; }
+
+    /* 작업 관리 */
+    .work-proj-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; margin-bottom: 12px; overflow: hidden; }
+    .work-proj-header { padding: 14px 18px; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+    .work-proj-header:hover { background: #F8FAFC; }
+    .work-proj-name { font-size: 13px; font-weight: 700; flex: 1; }
+    .work-proj-pct { font-size: 12px; font-weight: 700; }
+
+    /* 팀원 분포 테이블 */
+    .dist-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .dist-table th { background: #F8FAFC; padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 700; color: var(--muted); border-bottom: 1px solid var(--border); }
+    .dist-table td { padding: 10px 12px; border-bottom: 1px solid #F1F5F9; vertical-align: middle; }
+    .dist-table tr:last-child td { border-bottom: none; }
+    .proj-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; background: var(--primary-light); color: var(--primary); margin: 2px; white-space: nowrap; cursor: pointer; }
+    .proj-tag:hover { background: var(--primary); color: #fff; }
+
+    /* 모달 */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+    .modal { background: var(--card); border-radius: 16px; padding: 28px; width: 340px; max-width: 95vw; }
+    .modal h3 { font-size: 16px; font-weight: 700; margin-bottom: 18px; }
+    .form-group { margin-bottom: 14px; }
+    .form-group label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 5px; }
+    .error-msg { color: var(--danger); font-size: 12px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+
+<div class="app-header">
+  <h2>📋 PJT 관리</h2>
+  <div class="header-right" id="auth-area">
+    <button class="btn btn-outline btn-sm" onclick="showLoginModal()">🔐 로그인</button>
+  </div>
+</div>
+
+<div class="tab-nav">
+  <button class="active" onclick="switchTab('overview')">📊 PJT 현황</button>
+  <button onclick="switchTab('manage')">📁 PJT 관리</button>
+  <button onclick="switchTab('members')">👥 인원 관리</button>
+  <button onclick="switchTab('work')">🗂 작업 관리</button>
+  <button onclick="switchTab('issues')">🔧 이슈 관리</button>
+  <button onclick="switchTab('bulk')">📋 일괄등록</button>
+</div>
+
+<!-- PJT 현황 탭 -->
+<div id="tab-overview" class="tab-content">
+
+  <!-- 검색 -->
+  <div class="summary-card" style="margin-bottom:14px">
+    <div style="padding:14px 18px">
+      <div style="position:relative">
+        <input type="text" id="ov-search" placeholder="🔍 프로젝트 검색 (고객사 · 납품처 · 설비명 · 코드 등 이름에 포함된 단어)" oninput="onSearchInput()" style="width:100%;padding:10px 36px 10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;box-sizing:border-box" />
+        <button id="ov-search-clear" onclick="clearSearch()" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;color:var(--muted);cursor:pointer;font-size:16px;padding:4px">✕</button>
+      </div>
+      <div id="ov-search-result-count" style="font-size:11px;color:var(--muted);margin-top:6px;display:none"></div>
+    </div>
+  </div>
+
+  <!-- 리포트: 진행중 PJT 개수 + 단계별 분포 -->
+  <div class="summary-card" style="margin-bottom:14px">
+    <div class="summary-card-title">
+      <span>📊 진행 현황 리포트</span>
+      <span style="font-size:11px;font-weight:400;color:var(--muted)">전체 진행률 100% 미만 = 진행중 · 표시된 PJT(숨김 제외) 기준</span>
+    </div>
+    <div id="ov-report-body" style="padding:18px"></div>
+  </div>
+
+  <div class="summary-card">
+    <div class="summary-card-title">
+      <span>전체 PJT 진행 현황</span>
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:11px;font-weight:400;color:var(--muted)">행 클릭 → PJT 관리 · 단계 헤더 → 세부단계 펼치기</span>
+        <button id="toggle-hidden-btn" class="btn btn-outline btn-sm" onclick="toggleShowHidden()" style="font-size:11px;padding:4px 10px">숨김 PJT 표시</button>
+      </div>
+    </div>
+    <div class="filter-bar">
+      <span class="filter-bar-label">필터</span>
+      <select class="filter-select" id="filter-client" onchange="applyFilters()"><option value="">고객사 전체</option></select>
+      <select class="filter-select" id="filter-location" onchange="applyFilters()"><option value="">납품처 전체</option></select>
+      <div class="filter-divider"></div>
+      <span class="filter-bar-label">단계</span>
+      <button class="filter-btn all active" onclick="setPhaseFilter(null)" id="filter-btn-all">전체</button>
+      <button class="filter-btn" onclick="setPhaseFilter(1)" id="filter-btn-1">PJT 시작</button>
+      <button class="filter-btn" onclick="setPhaseFilter(2)" id="filter-btn-2">제작준비</button>
+      <button class="filter-btn" onclick="setPhaseFilter(3)" id="filter-btn-3">제작</button>
+      <button class="filter-btn" onclick="setPhaseFilter(4)" id="filter-btn-4">평가</button>
+      <button class="filter-btn" onclick="setPhaseFilter(5)" id="filter-btn-5">승인</button>
+      <button class="filter-btn" onclick="setPhaseFilter(6)" id="filter-btn-6">납품</button>
+      <button class="filter-btn" onclick="setPhaseFilter(7)" id="filter-btn-7">셋업</button>
+      <button class="filter-btn" onclick="setPhaseFilter(8)" id="filter-btn-8">종료</button>
+      <div class="filter-divider"></div>
+      <button class="filter-btn" onclick="resetAllFilters()" style="color:var(--danger);border-color:var(--danger)">초기화</button>
+    </div>
+    <div class="summary-scroll">
+      <table class="summary-table">
+        <thead>
+          <tr id="ov-hdr-main"></tr>
+          <tr id="ov-hdr-sub"></tr>
+        </thead>
+        <tbody id="ov-tbody"><tr><td colspan="20" class="loading-text">불러오는 중...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- PJT 관리 탭 -->
+<div id="tab-manage" class="tab-content" style="display:none">
+  <div class="project-bar">
+    <label>프로젝트</label>
+    <select id="mg-sel" onchange="onMgChange()"><option value="">프로젝트를 선택해주세요</option></select>
+    <button class="btn btn-primary btn-sm" onclick="showNewProjectModal()" style="white-space:nowrap">+ 신규 프로젝트</button>
+    <button class="edit-btn" id="mg-proj-edit-btn" onclick="showEditProjectModal()" style="display:none;white-space:nowrap">✏️ 프로젝트 편집</button>
+    <div id="mg-hidden-wrap" style="display:none;margin-left:auto;align-items:center;gap:8px">
+      <label style="font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap">이 프로젝트 숨김</label>
+      <input type="checkbox" id="mg-hidden-chk" onchange="saveProjectHidden(this.checked)" style="width:16px;height:16px;accent-color:var(--danger);cursor:pointer" />
+    </div>
+  </div>
+  <div id="mg-total-bar" class="total-progress-bar" style="display:none">
+    <div><div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:2px">전체 진행률</div>
+      <div class="total-pct-num" id="mg-pct-num">0%</div></div>
+    <div style="flex:1"><div class="total-bar-bg"><div class="total-bar-fill" id="mg-pct-fill" style="width:0%"></div></div>
+      <div id="mg-pct-label" style="font-size:12px;color:var(--muted);margin-top:4px"></div></div>
+  </div>
+  <div id="mg-info-card" class="mg-card" style="display:none">
+    <div class="mg-card-header">
+      <span class="mg-card-title">🧾 기본정보</span>
+      <button class="edit-btn" id="mg-info-btn" onclick="startEditInfo()">✏️ 편집</button>
+    </div>
+    <div id="mg-info-body"></div>
+  </div>
+  <div id="mg-assignee-card" class="mg-card" style="display:none">
+    <div class="mg-card-header">
+      <span class="mg-card-title">👥 담당자</span>
+      <button class="edit-btn" id="mg-asg-btn" onclick="startEditAsg()">✏️ 편집</button>
+    </div>
+    <div id="mg-asg-body"></div>
+  </div>
+  <div id="mg-schedule-card" class="schedule-card" style="display:none">
+    <div class="mg-card-header">
+      <span class="mg-card-title">📅 단계별 일정</span>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--muted)">날짜 셀 직접 클릭 입력 · 완료 체크박스로 완료 처리</span>
+        <div style="display:flex;align-items:center;gap:8px;background:#F1F5F9;border-radius:8px;padding:4px 10px">
+          <span style="font-size:10px;color:var(--muted);font-weight:600">소요일</span>
+          <span style="font-size:10px;color:var(--muted)">:</span>
+          <span style="font-size:10px;font-weight:700;color:var(--text)">실제</span>
+          <span style="font-size:10px;color:var(--muted)">(실행일 기준)</span>
+          <span style="font-size:10px;color:var(--border)">|</span>
+          <span style="font-size:10px;font-weight:400;color:var(--muted)">예상</span>
+          <span style="font-size:10px;color:var(--muted)">(계획일 기준)</span>
+          <span style="font-size:10px;color:var(--border)">|</span>
+          <span style="font-size:10px;color:var(--muted)">주말·공휴일 제외 영업일 기준</span>
+        </div>
+      </div>
+    </div>
+    <div class="schedule-scroll">
+      <table class="schedule-table">
+        <thead><tr>
+          <th class="th-name">단계</th>
+          <th style="width:36px">완료</th>
+          <th style="width:120px">계획일</th>
+          <th style="width:120px">실행일</th>
+          <th style="width:76px">소요일</th>
+          <th style="min-width:130px">비고</th>
+        </tr></thead>
+        <tbody id="mg-sched-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div id="mg-empty" class="loading-text">프로젝트를 선택해주세요</div>
+</div>
+
+<!-- 이슈 관리 탭 -->
+<!-- 인원 관리 탭 -->
+<div id="tab-members" class="tab-content" style="display:none">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:14px;font-weight:700">팀 인원 목록</span>
+      <span id="mb-count" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <button class="btn btn-primary btn-sm" id="mb-add-btn" onclick="showMemberModal()" style="display:none">+ 인원 추가</button>
+  </div>
+
+  <!-- 역할별 섹션 -->
+  <div class="mg-card" style="margin-bottom:16px">
+    <div class="mg-card-header">
+      <span class="mg-card-title">🔑 관리자</span>
+    </div>
+    <div id="mb-managers" style="padding:14px 18px">
+      <div class="loading-text" style="padding:20px">불러오는 중...</div>
+    </div>
+  </div>
+  <div class="mg-card">
+    <div class="mg-card-header">
+      <span class="mg-card-title">🔧 작업자</span>
+    </div>
+    <div id="mb-workers" style="padding:14px 18px">
+      <div class="loading-text" style="padding:20px">불러오는 중...</div>
+    </div>
+  </div>
+</div>
+
+<!-- 작업 관리 탭 -->
+<div id="tab-work" class="tab-content" style="display:none">
+  <!-- 내 정보 배너 -->
+  <div id="wk-banner" style="display:none;background:var(--primary-light);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:16px;align-items:center;gap:12px">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:2px">로그인 사용자</div>
+      <div style="font-size:14px;font-weight:700" id="wk-my-name">–</div>
+    </div>
+    <div style="width:1px;height:32px;background:var(--border)"></div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:2px">역할</div>
+      <div style="font-size:13px;font-weight:600" id="wk-my-role">–</div>
+    </div>
+    <div style="width:1px;height:32px;background:var(--border)"></div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:2px">담당 프로젝트</div>
+      <div style="font-size:13px;font-weight:600" id="wk-my-pjts">–</div>
+    </div>
+  </div>
+
+  <!-- 작업자: 내 프로젝트 목록 -->
+  <div id="wk-worker-section" style="display:none">
+    <div style="font-size:14px;font-weight:700;margin-bottom:12px">📋 내 담당 프로젝트</div>
+    <div id="wk-my-projects"></div>
+  </div>
+
+  <!-- 관리자: 팀원 분포 현황 -->
+  <div id="wk-manager-section" style="display:none">
+    <div class="mg-card" style="margin-bottom:16px">
+      <div class="mg-card-header">
+        <span class="mg-card-title">📊 팀원별 프로젝트 분포</span>
+      </div>
+      <div id="wk-dist-body" style="padding:14px 18px"></div>
+    </div>
+    <div class="mg-card">
+      <div class="mg-card-header">
+        <span class="mg-card-title">🗂 전체 프로젝트 배정 현황</span>
+        <button class="edit-btn" onclick="showAssignModal()">+ 배정 추가</button>
+      </div>
+      <div id="wk-assign-body" style="padding:14px 18px"></div>
+    </div>
+  </div>
+
+  <div id="wk-empty" class="loading-text">로그인 후 확인 가능합니다</div>
+</div>
+
+<div id="tab-issues" class="tab-content" style="display:none">
+  <div class="loading-text">🚧 준비 중입니다</div>
+</div>
+
+<!-- 일괄등록 탭 -->
+<div id="tab-bulk" class="tab-content" style="display:none">
+
+  <div class="summary-card">
+    <div class="summary-card-title">
+      <span>📋 엑셀 양식 그대로 일괄등록</span>
+    </div>
+    <div style="padding:16px 18px">
+      <p style="font-size:12px;color:var(--muted);line-height:1.8;margin-bottom:10px">
+        한 줄 = 한 프로젝트입니다. 엑셀에서 표를 만들어 <b>셀 범위를 드래그해 복사(Ctrl+C)</b>한 뒤 아래 칸에 그대로 <b>붙여넣기(Ctrl+V)</b>하거나, 메모장에서 각 항목을 <b>Tab 키</b>로 구분해 입력해주세요.<br/>
+        열 순서 (총 24열): <b>프로젝트명 · 포트 · 수량 · 인증 · PM · 기구 · 전장 · 분석 · QC · 평가 · 프로그램 · 영업</b> &nbsp;|&nbsp;
+        <b>제품사양서 · PJT시작회의 · 구매요청 · 설계 · 케이스입고 · 조립완료 · QC · 제작완료 · 평가이관 · 평가완료 · 승인 · 납품</b><br/>
+        날짜는 <b>YY.MM.DD</b>, <b>YYYY-MM-DD</b>, <b>YYYY.MM.DD</b> 모두 인식합니다. 빈 칸은 입력 안 함으로 처리됩니다.<br/>
+        <b style="color:var(--text)">날짜 처리 규칙:</b> 오늘(<span id="bulk-today-label"></span>) 이전 날짜는 <b style="color:var(--success)">완료일</b>로 저장되어 자동 완료 처리되고, 오늘 이후(미래) 날짜는 <b style="color:#4F46E5">계획일</b>로만 저장됩니다.<br/>
+        <b style="color:var(--warning)">⚠ 이미 같은 이름의 프로젝트가 있으면 새로 만들지 않고 기존 정보를 덮어씁니다.</b> 빈 칸으로 둔 항목은 기존 값을 그대로 유지합니다.
+      </p>
+      <textarea id="bulk-all-text" rows="10" placeholder="예시 (Tab으로 구분):
+SKH 청주 M15X Ph-3 SKHCFA-100(1)_S25-15-32	1	1		안국현	김용일	김형태	유병준	임민국	정지수	박무성	이재성	25.08.12	25.08.14	25.08.20		25.09.15	25.11.07	25.11.14	25.11.21	25.11.24			26.01.13" style="font-family:'Consolas','Courier New',monospace;font-size:12px;white-space:pre;resize:vertical"></textarea>
+      <p id="bulk-all-err" class="error-msg"></p>
+      <div id="bulk-all-preview" style="margin-top:10px"></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn btn-primary btn-sm" onclick="previewBulkAll()">미리보기</button>
+        <button class="btn btn-primary btn-sm" id="bulk-all-confirm-btn" style="display:none;background:var(--success)" onclick="confirmBulkAll()">✓ 위 내용대로 일괄 저장</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 인원 추가/편집 모달 -->
+<div id="mb-modal" class="modal-overlay" style="display:none">
+  <div class="modal" style="width:420px">
+    <h3 id="mb-modal-title">👥 인원 추가</h3>
+    <input type="hidden" id="mb-edit-id" />
+    <div class="form-group">
+      <label>이름</label>
+      <input id="mb-name" type="text" placeholder="이름" />
+    </div>
+    <div class="form-group">
+      <label>이메일 (로그인 계정)</label>
+      <input id="mb-email" type="email" placeholder="이메일" />
+    </div>
+    <div class="form-group">
+      <label>역할</label>
+      <select id="mb-role">
+        <option value="worker">작업자</option>
+        <option value="manager">관리자</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>팀/직책 (선택)</label>
+      <input id="mb-team" type="text" placeholder="예: 셋업팀, 평가팀" />
+    </div>
+    <p id="mb-err" class="error-msg"></p>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveMember()">저장</button>
+      <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('mb-modal').style.display='none'">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- 프로젝트 배정 모달 -->
+<div id="assign-modal" class="modal-overlay" style="display:none">
+  <div class="modal" style="width:420px">
+    <h3>🗂 프로젝트 배정</h3>
+    <div class="form-group">
+      <label>인원</label>
+      <select id="assign-member"></select>
+    </div>
+    <div class="form-group">
+      <label>프로젝트</label>
+      <select id="assign-project"></select>
+    </div>
+    <div class="form-group">
+      <label>역할 (선택)</label>
+      <input id="assign-role" type="text" placeholder="예: PM, 설계, 제작(전장)" />
+    </div>
+    <p id="assign-err" class="error-msg"></p>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveAssignment()">배정</button>
+      <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('assign-modal').style.display='none'">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- 프로젝트 편집 모달 -->
+<div id="ep-modal" class="modal-overlay" style="display:none">
+  <div class="modal" style="width:400px">
+    <h3>✏️ 프로젝트 편집</h3>
+    <div class="form-group">
+      <label>프로젝트명</label>
+      <input id="ep-name" type="text" placeholder="프로젝트명" />
+    </div>
+    <p id="ep-err" class="error-msg"></p>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveEditProject()">저장</button>
+      <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('ep-modal').style.display='none'">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- 신규 프로젝트 모달 -->
+<div id="np-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <h3>📁 신규 프로젝트 생성</h3>
+    <div class="form-group"><label>프로젝트명</label>
+      <input id="np-name" type="text" placeholder="프로젝트명" onkeydown="if(event.key==='Enter')saveNewProject()" /></div>
+    <p id="np-err" class="error-msg"></p>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveNewProject()">생성</button>
+      <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('np-modal').style.display='none'">취소</button>
+    </div>
+  </div>
+</div>
+
+<!-- 로그인 모달 -->
+<div id="li-modal" class="modal-overlay" style="display:none">
+  <div class="modal">
+    <h3>🔐 로그인</h3>
+    <div class="form-group"><label>이메일</label><input id="li-email" type="email" placeholder="이메일" /></div>
+    <div class="form-group"><label>비밀번호</label><input id="li-pw" type="password" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin()" /></div>
+    <p id="li-err" class="error-msg"></p>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="doLogin()">로그인</button>
+      <button class="btn btn-outline" style="flex:1" onclick="document.getElementById('li-modal').style.display='none'">취소</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://lgcgmgqnmbntmwyhqidr.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxnY2dtZ3FubWJudG13eWhxaWRyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MDgzNTYsImV4cCI6MjA5NjA4NDM1Nn0.6hvhHEECTOuZROlXR0g4tV58Ifbt_DeSr4IQBb2zZz0';
+
+const PHASES = [
+  { phase:0, name:'제품사양서',subs:[] },
+  { phase:1, name:'PJT 시작',  subs:['1-1. PJT 시작회의','1-2. BOM등록/구매요청'] },
+  { phase:2, name:'제작준비',  subs:['2-1. 설계','2-2. 케이스입고'] },
+  { phase:3, name:'제작',      subs:['3-1. 제작','3-2. QC','3-3. 제작완료'] },
+  { phase:4, name:'평가',      subs:['4-1. 평가이관','4-2. 평가완료'] },
+  { phase:5, name:'승인',      subs:[] },
+  { phase:6, name:'납품',      subs:[] },
+  { phase:7, name:'셋업',      subs:['7-1. 셋업','7-2. 셋업보고서 상신'] },
+  { phase:8, name:'종료',      subs:[] },
+];
+const ASGN = [
+  { key:'pm',           label:'PM' },
+  { key:'designer',     label:'설계' },
+  { key:'elec',         label:'제작 (전장)' },
+  { key:'chem',         label:'제작 (분석)' },
+  { key:'qc',           label:'QC' },
+  { key:'evaluator',    label:'평가' },
+  { key:'program',      label:'프로그램' },
+  { key:'delivery',     label:'납품' },
+];
+// 일괄등록용 14개 sub-phase 고정 순서 (subs 없는 대분류는 t:'ph'로, 있는 건 t:'sub'로)
+const SUB_FLAT = [];
+PHASES.forEach(p => {
+  if (p.subs.length === 0) {
+    SUB_FLAT.push({ t:'ph', phase:p.phase, sub:null, label:p.phase+'. '+p.name });
+  } else {
+    p.subs.forEach(s => SUB_FLAT.push({ t:'sub', phase:p.phase, sub:s, label:s }));
+  }
+});
+
+let sb, cu; // supabase client, current user
+let projects=[], allPD={}, allSD={}, setupByProj={}, setupDone={};
+let members=[], assignments=[], myMember=null;
+let mgId=null, editAsg=false;
+let wkOpenProj=null;
+let showHidden=false, phaseFilter=null, clientFilter='', locFilter='', searchQuery='';
+let expandedOv=new Set();
+
+// ── 초기화 ──
+(async function init() {
+  // 초기 탭 상태 설정 - tab-overview만 표시
+  ['manage','members','work','issues'].forEach(t => {
+    const el = document.getElementById('tab-'+t);
+    if (el) el.style.display = 'none';
+  });
+  document.getElementById('tab-overview').style.display = 'block';
+
+  try {
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const { data:{ session } } = await sb.auth.getSession();
+    if (session?.user) { cu = session.user; updateAuthUI(); }
+    await loadAll();
+  } catch(e) {
+    console.error('init error:', e);
+    document.getElementById('ov-tbody').innerHTML =
+      '<tr><td colspan="20" style="padding:20px;text-align:center;color:red">초기화 오류: ' + e.message + '</td></tr>';
+  }
+})();
+
+async function loadAll() {
+  document.getElementById('ov-tbody').innerHTML =
+    '<tr><td colspan="20" class="loading-text">데이터 불러오는 중...</td></tr>';
+  console.log('[1] loadProjects 시작');
+  try { await loadProjects(); console.log('[1] loadProjects 완료, 프로젝트 수:', projects.length); }
+  catch(e) { console.error('[1] loadProjects 오류:', e.message); }
+
+  console.log('[2] loadAllPhaseData 시작');
+  try { await loadAllPhaseData(); console.log('[2] loadAllPhaseData 완료'); }
+  catch(e) { console.error('[2] loadPhaseData 오류:', e.message); }
+
+  console.log('[3] loadSetupData 시작');
+  try { await loadSetupData(); console.log('[3] loadSetupData 완료'); }
+  catch(e) { console.warn('[3] loadSetupData 오류 (무시):', e.message); }
+
+  console.log('[4] loadMembers 시작');
+  try { await loadMembers(); console.log('[4] loadMembers 완료, 인원 수:', members.length); }
+  catch(e) { console.warn('[4] loadMembers 오류 (무시):', e.message); }
+
+  console.log('[5] renderOverview 시작');
+  try { buildFilterOptions(); renderOverview(); console.log('[5] renderOverview 완료'); }
+  catch(e) {
+    console.error('[5] renderOverview 오류:', e.message);
+    document.getElementById('ov-tbody').innerHTML =
+      '<tr><td colspan="20" style="padding:20px;text-align:center;color:red">렌더링 오류: ' + e.message + '</td></tr>';
+  }
+}
+
+async function loadProjects() {
+  const { data, error } = await sb.from('projects').select('*').order('created_at');
+  if (error) throw error;
+  projects = data || [];
+  const sel = document.getElementById('mg-sel');
+  if (sel) {
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">프로젝트를 선택해주세요</option>' +
+      projects.map(p => '<option value="' + p.id + '">' + escHtml(p.name) + '</option>').join('');
+    if (prev) sel.value = prev;
+  }
+}
+
+async function loadAllPhaseData() {
+  if (!projects.length) return;
+  const ids = projects.map(p => p.id);
+  const [{ data: pd }, { data: sd }] = await Promise.all([
+    sb.from('pjt_phases').select('*').in('project_id', ids),
+    sb.from('pjt_sub_phases').select('*').in('project_id', ids),
+  ]);
+  allPD = {}; allSD = {};
+  projects.forEach(p => { allPD[p.id] = {}; allSD[p.id] = {}; });
+  (pd||[]).forEach(r => { if (allPD[r.project_id]) allPD[r.project_id][r.phase] = r; });
+  (sd||[]).forEach(r => { if (allSD[r.project_id]) allSD[r.project_id][r.phase+'::'+r.sub_phase] = r; });
+}
+
+async function loadSetupData() {
+  setupByProj = {}; setupDone = {};
+  if (!projects.length) return;
+  try {
+    const ids = projects.map(p => p.id);
+    const { data: units, error: uErr } = await sb.from('equipment_units').select('id, project_id').in('project_id', ids);
+    if (uErr) { console.warn('equipment_units 조회 실패 (셋업 연동 비활성):', uErr.message); return; }
+    (units||[]).forEach(u => {
+      if (!setupByProj[u.project_id]) setupByProj[u.project_id] = [];
+      setupByProj[u.project_id].push(u.id);
+    });
+    const allIds = (units||[]).map(u => u.id);
+    if (!allIds.length) return;
+    for (let i = 0; i < allIds.length; i += 100) {
+      const chunk = allIds.slice(i, i + 100);
+      const { data: comps, error: cErr } = await sb.from('stage_completions').select('unit_id, stage').in('unit_id', chunk);
+      if (cErr) { console.warn('stage_completions 조회 실패:', cErr.message); continue; }
+      (comps||[]).forEach(r => {
+        if (!setupDone[r.unit_id]) setupDone[r.unit_id] = new Set();
+        setupDone[r.unit_id].add(r.stage);
+      });
+    }
+  } catch(e) {
+    console.warn('loadSetupData 오류 (셋업 연동 비활성):', e.message);
+  }
+}
+
+// ── 탭 ──
+function switchTab(tab) {
+  ['overview','manage','members','work','issues','bulk'].forEach(t => {
+    const el = document.getElementById('tab-'+t);
+    if (el) el.style.display = (t === tab) ? 'block' : 'none';
+  });
+  document.querySelectorAll('.tab-nav button').forEach((b,i) =>
+    b.classList.toggle('active', ['overview','manage','members','work','issues','bulk'][i] === tab));
+  if (tab === 'overview') renderOverview();
+  if (tab === 'members') renderMembers();
+  if (tab === 'work') renderWork();
+  if (tab === 'bulk') renderBulkTab();
+}
+
+// ── 인증 ──
+function showLoginModal() { document.getElementById('li-modal').style.display = 'flex'; }
+async function doLogin() {
+  const { data, error } = await sb.auth.signInWithPassword({
+    email: document.getElementById('li-email').value.trim(),
+    password: document.getElementById('li-pw').value });
+  if (error) { document.getElementById('li-err').textContent = error.message; return; }
+  cu = data.user; updateAuthUI();
+  document.getElementById('li-modal').style.display = 'none';
+  renderOverview();
+  if (mgId) renderManage();
+}
+async function doLogout() {
+  await sb.auth.signOut(); cu = null; updateAuthUI();
+  renderOverview(); if (mgId) renderManage();
+}
+function updateAuthUI() {
+  document.getElementById('auth-area').innerHTML = cu
+    ? '<span style="font-size:11px;color:var(--muted)">' + escHtml(cu.email) + '</span>' +
+      '<button class="btn btn-outline btn-sm" onclick="doLogout()">로그아웃</button>'
+    : '<button class="btn btn-outline btn-sm" onclick="showLoginModal()">🔐 로그인</button>';
+}
+
+// ── 신규 프로젝트 ──
+function showEditProjectModal() {
+  if (!cu || !mgId) return;
+  const proj = projects.find(p => p.id === mgId);
+  document.getElementById('ep-name').value = proj?.name || '';
+  document.getElementById('ep-err').textContent = '';
+  document.getElementById('ep-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('ep-name').focus(), 100);
+}
+
+async function saveEditProject() {
+  if (!cu || !mgId) return;
+  const name = document.getElementById('ep-name').value.trim();
+  if (!name) { document.getElementById('ep-err').textContent = '프로젝트명을 입력해주세요'; return; }
+  const { error } = await sb.from('projects').update({ name }).eq('id', mgId);
+  if (error) { document.getElementById('ep-err').textContent = '저장 실패: ' + error.message; return; }
+  document.getElementById('ep-modal').style.display = 'none';
+  // 로컬 데이터 업데이트
+  const proj = projects.find(p => p.id === mgId);
+  if (proj) proj.name = name;
+  // 셀렉트박스 업데이트
+  const opt = document.querySelector('#mg-sel option[value="' + mgId + '"]');
+  if (opt) opt.textContent = name;
+  buildFilterOptions();
+  renderOverview();
+}
+
+function showNewProjectModal() {
+  if (!cu) { showLoginModal(); return; }
+  document.getElementById('np-name').value = '';
+  document.getElementById('np-err').textContent = '';
+  document.getElementById('np-modal').style.display = 'flex';
+  setTimeout(() => document.getElementById('np-name').focus(), 100);
+}
+async function saveNewProject() {
+  const name = document.getElementById('np-name').value.trim();
+  if (!name) { document.getElementById('np-err').textContent = '프로젝트명을 입력해주세요'; return; }
+  const { data, error } = await sb.from('projects').insert({ name }).select().single();
+  if (error) { document.getElementById('np-err').textContent = '생성 실패: ' + error.message; return; }
+  document.getElementById('np-modal').style.display = 'none';
+  await loadAll();
+  switchTab('manage');
+  document.getElementById('mg-sel').value = data.id;
+  onMgChange();
+}
+
+// ── 숨김 ──
+async function saveProjectHidden(hidden) {
+  if (!cu || !mgId) return;
+  await sb.from('projects').update({ hidden }).eq('id', mgId);
+  const p = projects.find(p => p.id === mgId);
+  if (p) p.hidden = hidden;
+  renderOverview();
+}
+
+// ── 필터 ──
+function parsePN(name) { const p = (name||'').split(' '); return { client: p[0]||'', loc: p[1]||'' }; }
+function buildFilterOptions() {
+  const cl = new Set(), lo = new Set();
+  projects.forEach(p => { const r = parsePN(p.name); if(r.client) cl.add(r.client); if(r.loc) lo.add(r.loc); });
+  const cs = document.getElementById('filter-client'), ls = document.getElementById('filter-location');
+  const pc = cs.value, pl = ls.value;
+  cs.innerHTML = '<option value="">고객사 전체</option>' + [...cl].sort().map(c => '<option value="' + c + '">' + c + '</option>').join('');
+  ls.innerHTML = '<option value="">납품처 전체</option>' + [...lo].sort().map(l => '<option value="' + l + '">' + l + '</option>').join('');
+  cs.value = pc; ls.value = pl;
+}
+function applyFilters() {
+  clientFilter = document.getElementById('filter-client').value;
+  locFilter    = document.getElementById('filter-location').value;
+  document.getElementById('filter-client').classList.toggle('active', !!clientFilter);
+  document.getElementById('filter-location').classList.toggle('active', !!locFilter);
+  renderOverview();
+}
+function setPhaseFilter(n) {
+  phaseFilter = n;
+  document.getElementById('filter-btn-all').classList.toggle('active', n === null);
+  [1,2,3,4,5,6,7,8].forEach(i => { const b = document.getElementById('filter-btn-'+i); if(b) b.classList.toggle('active', i === n); });
+  renderOverview();
+}
+function resetAllFilters() {
+  clientFilter=''; locFilter=''; phaseFilter=null;
+  document.getElementById('filter-client').value = '';
+  document.getElementById('filter-location').value = '';
+  document.getElementById('filter-client').classList.remove('active');
+  document.getElementById('filter-location').classList.remove('active');
+  setPhaseFilter(null);
+}
+function toggleShowHidden() {
+  showHidden = !showHidden;
+  const btn = document.getElementById('toggle-hidden-btn');
+  btn.textContent = showHidden ? '숨김 PJT 숨기기' : '숨김 PJT 표시';
+  btn.style.color = showHidden ? 'var(--danger)' : '';
+  btn.style.borderColor = showHidden ? 'var(--danger)' : '';
+  renderOverview();
+}
+
+// ── 검색 ──
+let searchDebounce = null;
+function onSearchInput() {
+  const val = document.getElementById('ov-search').value;
+  document.getElementById('ov-search-clear').style.display = val ? '' : 'none';
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(() => {
+    searchQuery = val.trim().toLowerCase();
+    renderOverview();
+  }, 150);
+}
+function clearSearch() {
+  document.getElementById('ov-search').value = '';
+  document.getElementById('ov-search-clear').style.display = 'none';
+  searchQuery = '';
+  renderOverview();
+}
+
+// ── 리포트: 진행중 PJT가 8단계 중 "현재 머물러 있는 단계" 분포 ──
+// 규칙: 1~8단계를 순서대로 보며 처음으로 100% 완료가 아닌 단계 = 현재 단계. 전부 100%면 '완료'.
+function calcCurrentStage(pid) {
+  const countPhases = PHASES.filter(p => p.phase !== 0); // 0단계(정보성)는 제외
+  for (const p of countPhases) {
+    if (calcPhasePct(pid, p.phase) < 100) return p.phase;
+  }
+  return 'done';
+}
+function renderOverviewReport(allVisible) {
+  const countPhases = PHASES.filter(p => p.phase !== 0);
+  const inProgress = allVisible.filter(p => calcTotalPct(p.id) < 100);
+  const doneCount = allVisible.length - inProgress.length;
+
+  const dist = {};
+  countPhases.forEach(p => dist[p.phase] = 0);
+  inProgress.forEach(p => {
+    const stage = calcCurrentStage(p.id);
+    if (stage !== 'done') dist[stage] = (dist[stage]||0) + 1;
+  });
+  const maxCount = Math.max(1, ...Object.values(dist));
+
+  let html = '<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">';
+
+  // 좌측: 진행중/완료 카운트 카드
+  html += '<div style="display:flex;flex-direction:column;gap:10px;min-width:140px">' +
+    '<div style="background:var(--primary-light);border-radius:10px;padding:14px 16px">' +
+      '<div style="font-size:11px;color:var(--primary);font-weight:600">진행중인 PJT</div>' +
+      '<div style="font-size:28px;font-weight:800;color:var(--primary);margin-top:2px">' + inProgress.length + '</div>' +
+    '</div>' +
+    '<div style="background:#F0FDF4;border-radius:10px;padding:14px 16px">' +
+      '<div style="font-size:11px;color:#065F46;font-weight:600">완료된 PJT</div>' +
+      '<div style="font-size:22px;font-weight:800;color:#065F46;margin-top:2px">' + doneCount + '</div>' +
+    '</div>' +
+  '</div>';
+
+  // 우측: 단계별 분포 바
+  html += '<div style="flex:1;min-width:280px">';
+  html += '<div style="font-size:11px;color:var(--muted);font-weight:600;margin-bottom:10px">단계별 분포 (현재 머물러 있는 단계 기준)</div>';
+  countPhases.forEach(p => {
+    const cnt = dist[p.phase] || 0;
+    const pct = inProgress.length ? Math.round(cnt / inProgress.length * 100) : 0;
+    const barW = Math.round(cnt / maxCount * 100);
+    html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px">' +
+      '<div style="width:64px;font-size:11px;color:var(--text);flex-shrink:0;text-align:right">' + escHtml(p.name) + '</div>' +
+      '<div style="flex:1;background:#F1F5F9;border-radius:6px;height:18px;position:relative;overflow:hidden">' +
+        '<div style="width:' + barW + '%;height:100%;background:linear-gradient(90deg,#6366F1,#818CF8);border-radius:6px;transition:width .3s"></div>' +
+      '</div>' +
+      '<div style="width:74px;font-size:11px;color:var(--muted);flex-shrink:0">' + cnt + '개 (' + pct + '%)</div>' +
+    '</div>';
+  });
+  html += '</div>';
+
+  html += '</div>';
+  document.getElementById('ov-report-body').innerHTML = html;
+}
+
+// ── 진행률 계산 ──
+// ── 가중치 정의 ──
+// 각 소분류/대분류가 전체 진행률에서 차지하는 포인트 (합계 100)
+const WEIGHT = {
+  // 1단계 (합 10)
+  '1::1-1. PJT 시작회의':       3,
+  '1::1-2. BOM등록/구매요청':   7,
+  // 2단계 (합 10)
+  '2::2-1. 설계':               7,
+  '2::2-2. 케이스입고':          3,
+  // 3단계 (합 25)
+  '3::3-1. 제작':               15,
+  '3::3-2. QC':                   5,
+  '3::3-3. 제작완료':             5,
+  // 4단계 (합 20)
+  '4::4-1. 평가이관':            15,
+  '4::4-2. 평가완료':            5,
+  // 5단계 (합 5, 소분류 없음)
+  '5': 5,
+  // 6단계 (합 5, 소분류 없음)
+  '6': 5,
+  // 7단계 (합 20, 셋업 index 연동)
+  '7::7-1. 셋업':               15,
+  '7::7-2. 셋업보고서 상신':     5,
+  // 8단계 (합 5, 소분류 없음)
+  '8': 5,
+};
+
+// 전체 진행률 계산 (가중치 기반)
+function calcTotalPct(pid) {
+  let total = 0;
+
+  PHASES.forEach(p => {
+    if (p.subs.length === 0) {
+      // 소분류 없는 단계: done 여부로 가중치 전체 반영
+      const w = WEIGHT[String(p.phase)] || 0;
+      if (allPD[pid]?.[p.phase]?.done) total += w;
+    } else if (p.phase === 7) {
+      // 7단계 셋업: index 연동 진행률을 20포인트 내에서 반영
+      const setupRaw = calcSetupRaw(pid); // 0~100
+      const w7 = (WEIGHT['7::7-1. 셋업']||0) + (WEIGHT['7::7-2. 셋업보고서 상신']||0);
+      if ((setupByProj[pid]||[]).length > 0) {
+        // index 연동: 셋업 진행률 비례
+        total += Math.round(setupRaw / 100 * w7);
+      } else {
+        // 연동 없으면 소분류 체크로 계산
+        p.subs.forEach(s => {
+          if (allSD[pid]?.[p.phase+'::'+s]?.done) total += WEIGHT[p.phase+'::'+s] || 0;
+        });
+      }
+    } else {
+      // 소분류 있는 단계: 완료된 소분류의 가중치 합산
+      p.subs.forEach(s => {
+        if (allSD[pid]?.[p.phase+'::'+s]?.done) total += WEIGHT[p.phase+'::'+s] || 0;
+      });
+    }
+  });
+
+  return Math.min(100, Math.round(total));
+}
+
+// ── index 연동 셋업 진행률 헬퍼 ──
+
+// 7-1 셋업: stage 1~7 완료 비율 (0~100)
+function calcSetup71Raw(pid) {
+  const units = setupByProj[pid] || [];
+  if (!units.length) return 0;
+  const targetStages = [1,2,3,4,5,6,7];
+  const total = units.length * targetStages.length;
+  const done = units.reduce((s, uid) => {
+    return s + targetStages.filter(st => setupDone[uid]?.has(st)).length;
+  }, 0);
+  return Math.round(done / total * 100);
+}
+
+// 7-2 셋업보고서: stage 8 모든 호기 완료 여부 (0 or 100)
+function calcSetup72Raw(pid) {
+  const units = setupByProj[pid] || [];
+  if (!units.length) return 0;
+  const allDone = units.every(uid => setupDone[uid]?.has(8));
+  return allDone ? 100 : 0;
+}
+
+// 전체 진행률 계산 (가중치 기반) - 7단계 분리 버전
+function calcTotalPct(pid) {
+  let total = 0;
+  const hasSetup = (setupByProj[pid]||[]).length > 0;
+
+  PHASES.forEach(p => {
+    if (p.subs.length === 0) {
+      const w = WEIGHT[String(p.phase)] || 0;
+      if (allPD[pid]?.[p.phase]?.done) total += w;
+    } else if (p.phase === 7) {
+      if (hasSetup) {
+        // 7-1: stage 1~7 비율 × 15pt
+        const w71 = WEIGHT['7::7-1. 셋업'] || 15;
+        total += Math.round(calcSetup71Raw(pid) / 100 * w71);
+        // 7-2: stage 8 전체 완료 여부 × 5pt
+        const w72 = WEIGHT['7::7-2. 셋업보고서 상신'] || 5;
+        if (calcSetup72Raw(pid) === 100) total += w72;
+      } else {
+        // 연동 없으면 소분류 체크로 계산
+        p.subs.forEach(s => {
+          if (allSD[pid]?.[p.phase+'::'+s]?.done) total += WEIGHT[p.phase+'::'+s] || 0;
+        });
+      }
+    } else {
+      p.subs.forEach(s => {
+        if (allSD[pid]?.[p.phase+'::'+s]?.done) total += WEIGHT[p.phase+'::'+s] || 0;
+      });
+    }
+  });
+
+  return Math.min(100, Math.round(total));
+}
+
+// 현황표용 단계별 진행률 (0~100)
+function calcPhasePct(pid, ph) {
+  const p = PHASES.find(x => x.phase === ph);
+  if (!p) return 0;
+  const hasSetup = (setupByProj[pid]||[]).length > 0;
+
+  if (p.subs.length === 0) {
+    return allPD[pid]?.[ph]?.done ? 100 : 0;
+  }
+  if (ph === 7 && hasSetup) {
+    // 7단계 전체: 7-1(15pt) + 7-2(5pt) 합산을 20pt 기준으로 0~100 환산
+    const w71 = WEIGHT['7::7-1. 셋업'] || 15;
+    const w72 = WEIGHT['7::7-2. 셋업보고서 상신'] || 5;
+    const w7  = w71 + w72;
+    const pts = Math.round(calcSetup71Raw(pid) / 100 * w71) +
+                (calcSetup72Raw(pid) === 100 ? w72 : 0);
+    return Math.round(pts / w7 * 100);
+  }
+  const done = p.subs.filter(s => allSD[pid]?.[ph+'::'+s]?.done).length;
+  return Math.round(done / p.subs.length * 100);
+}
+
+// 7-1, 7-2 각각의 진행률 (일정 테이블 표시용)
+function calcSubPhasePct71(pid) {
+  const hasSetup = (setupByProj[pid]||[]).length > 0;
+  if (!hasSetup) return allSD[pid]?.['7::7-1. 셋업']?.done ? 100 : 0;
+  return calcSetup71Raw(pid);
+}
+function calcSubPhasePct72(pid) {
+  const hasSetup = (setupByProj[pid]||[]).length > 0;
+  if (!hasSetup) return allSD[pid]?.['7::7-2. 셋업보고서 상신']?.done ? 100 : 0;
+  return calcSetup72Raw(pid);
+}
+
+// ──────────────────────────────────────────
+// PJT 현황 탭
+// ──────────────────────────────────────────
+function renderOverview() {
+  let vis = showHidden ? projects : projects.filter(p => !p.hidden);
+  if (clientFilter) vis = vis.filter(p => parsePN(p.name).client === clientFilter);
+  if (locFilter)    vis = vis.filter(p => parsePN(p.name).loc    === locFilter);
+  if (phaseFilter !== null) vis = vis.filter(p => calcCurrentStage(p.id) === phaseFilter);
+  if (searchQuery) vis = vis.filter(p => p.name.toLowerCase().includes(searchQuery));
+
+  renderOverviewReport(showHidden ? projects : projects.filter(p => !p.hidden));
+
+  const resCountEl = document.getElementById('ov-search-result-count');
+  if (searchQuery) {
+    resCountEl.style.display = 'block';
+    resCountEl.textContent = '"' + searchQuery + '" 검색 결과: ' + vis.length + '개';
+  } else {
+    resCountEl.style.display = 'none';
+  }
+
+  vis = [...vis].sort((a,b) => {
+    const pa = parsePN(a.name), pb = parsePN(b.name);
+    return pa.client !== pb.client ? pa.client.localeCompare(pb.client) :
+           pa.loc    !== pb.loc    ? pa.loc.localeCompare(pb.loc,'ko') :
+           a.name.localeCompare(b.name,'ko');
+  });
+
+  // 헤더 메인 - 대분류 셀 유지 + 소분류 셀 오른쪽에 추가 (index_13 방식)
+  let hM = '<th class="th-left" style="border:1px solid #6366F1">프로젝트</th>' +
+            '<th class="th-total" style="border:1px solid #6366F1">전체<br>진행률</th>';
+  PHASES.forEach(p => {
+    const hs = p.subs.length > 0;
+    const isExp = expandedOv.has(p.phase);
+    // 대분류 헤더 (항상 표시)
+    hM += '<th class="th-phase" style="border:1px solid #6366F1;' + (hs?'cursor:pointer':'') + '"' +
+          (hs ? ' onclick="toggleOv(' + p.phase + ')"' : '') + '>' +
+          escHtml(p.name) + (hs ? ' <span class="ov-arr-' + p.phase + '" style="font-size:9px;opacity:.7">' + (isExp?'◀':'▶') + '</span>' : '') +
+          '</th>';
+    // 소분류 헤더들 (오른쪽에 추가, 기본 hidden)
+    if (hs) {
+      p.subs.forEach(s => {
+        hM += '<th class="ov-sub-' + p.phase + '" style="border:1px solid #6366F1;background:#6366F1;font-size:10px;' + (isExp?'':'display:none') + '">' +
+          escHtml(s) + '</th>';
+      });
+    }
+  });
+  document.getElementById('ov-hdr-main').innerHTML = hM;
+  document.getElementById('ov-hdr-sub').style.display = 'none';
+
+  // 데이터 행
+  if (!vis.length) {
+    const msg = searchQuery
+      ? '"' + searchQuery + '" 검색 결과가 없습니다'
+      : phaseFilter !== null
+      ? (PHASES.find(p=>p.phase===phaseFilter)?.name || '') + ' 진행중인 프로젝트가 없습니다'
+      : '표시할 프로젝트가 없습니다';
+    document.getElementById('ov-tbody').innerHTML = '<tr><td colspan="30" class="loading-text">' + msg + '</td></tr>';
+    return;
+  }
+
+  let tbody = '';
+  vis.forEach(proj => {
+    const tp = calcTotalPct(proj.id), tc = pctCol(tp), tb = pctBg(tp);
+    const infoTags = [
+      proj.port_count ? '<span class="proj-info-tag">⛁ ' + escHtml(proj.port_count) + '포트</span>' : '',
+      proj.quantity   ? '<span class="proj-info-tag">x' + escHtml(proj.quantity) + '</span>' : '',
+      proj.cert_name  ? '<span class="proj-info-tag cert">' + escHtml(proj.cert_name) + '</span>' : '',
+    ].filter(Boolean).join('');
+    let row = '<tr onclick="goManage(\'' + proj.id + '\')" style="' + (proj.hidden?'opacity:.5':'') + '">' +
+      '<td class="td-proj" style="border:1px solid #E2E8F0">' +
+        (proj.hidden ? '<span style="font-size:10px;background:#FEE2E2;color:#991B1B;padding:1px 5px;border-radius:4px;margin-right:4px">숨김</span>' : '') +
+        escHtml(proj.name) +
+        (infoTags ? '<div style="margin-top:3px;display:flex;gap:4px;flex-wrap:wrap">' + infoTags + '</div>' : '') +
+        '</td>' +
+      '<td style="border:1px solid #E2E8F0;background:' + tb + '">' +
+        '<div class="pct-wrap"><span style="font-size:13px;font-weight:700;color:' + tc + '">' + tp + '%</span>' +
+        '<div class="pct-bar"><div class="pct-fill" style="width:' + tp + '%;background:' + tc + '"></div></div></div></td>';
+
+    PHASES.forEach(p => {
+      const isExp = expandedOv.has(p.phase);
+      const pp = calcPhasePct(proj.id, p.phase);
+      const pc = pctCol(pp), pb = pctBg(pp);
+
+      // 대분류 셀 (항상 표시)
+      const lastSub = p.subs.length > 0 ? p.subs[p.subs.length-1] : null;
+      const pd = lastSub ? (allSD[proj.id]?.[p.phase+'::'+lastSub]||{}) : (allPD[proj.id]?.[p.phase]||{});
+      const allDone = p.subs.length > 0
+        ? p.subs.every(s => allSD[proj.id]?.[p.phase+'::'+s]?.done)
+        : (allPD[proj.id]?.[p.phase]?.done||false);
+      const tgt = pd.plan_date||'', end = pd.end_date||'';
+      row += '<td style="border:1px solid #E2E8F0;background:' + pb + '">' +
+        '<div class="phase-date-cell">' +
+        '<span style="font-size:12px;font-weight:700;color:' + pc + '">' + pp + '%</span>' +
+        (allDone && end ? '<span class="date-tag done">종료 ' + fmtDate(end) + '</span>' :
+         tgt ? '<span class="date-tag target">목표 ' + fmtDate(tgt) + '</span>' :
+         '<span style="font-size:10px;color:#CBD5E1">미설정</span>') +
+        '</div></td>';
+
+      // 소분류 셀들 (대분류 오른쪽에 추가, 기본 hidden)
+      if (p.subs.length > 0) {
+        p.subs.forEach(sub => {
+          const sd = allSD[proj.id]?.[p.phase+'::'+sub] || {};
+          const isDone = sd.done||false;
+          const sbg = isDone ? '#F0FDF4' : sd.plan_date ? '#EEF2FF' : '#fff';
+          row += '<td class="ov-sub-' + p.phase + '" style="border:1px solid #C4B5FD;background:' + sbg + ';' + (isExp?'':'display:none') + ';min-width:100px">' +
+            '<div class="phase-date-cell">' +
+            (isDone
+              ? '<span class="date-tag done">✓ 완료</span>' + (sd.end_date ? '<span style="font-size:10px;color:#065F46">' + fmtDate(sd.end_date) + '</span>' : '')
+              : sd.plan_date ? '<span class="date-tag target">목표</span><span style="font-size:10px;color:#4F46E5">' + fmtDate(sd.plan_date) + '</span>'
+              : '<span style="font-size:10px;color:#CBD5E1">–</span>') +
+            '</div></td>';
+        });
+      }
+    });
+    row += '</tr>';
+    tbody += row;
+  });
+  document.getElementById('ov-tbody').innerHTML = tbody;
+}
+
+// index_13 방식: 대분류 유지, 소분류만 오른쪽에 show/hide
+function toggleOv(ph) {
+  if (expandedOv.has(ph)) expandedOv.delete(ph);
+  else expandedOv.add(ph);
+  const isExp = expandedOv.has(ph);
+  const table = document.querySelector('.summary-table');
+  if (!table) return;
+  // 소분류 헤더/셀만 show/hide (대분류는 그대로 유지)
+  table.querySelectorAll('.ov-sub-' + ph).forEach(el => { el.style.display = isExp ? '' : 'none'; });
+  // 대분류 헤더 화살표 업데이트
+  table.querySelectorAll('.ov-arr-' + ph).forEach(el => { el.textContent = isExp ? '◀' : '▶'; });
+}
+function goManage(pid) { switchTab('manage'); document.getElementById('mg-sel').value = pid; onMgChange(); }
+
+// ──────────────────────────────────────────
+// PJT 관리 탭
+// ──────────────────────────────────────────
+function onMgChange() {
+  mgId = document.getElementById('mg-sel').value || null;
+  editAsg = false;
+  const hw = document.getElementById('mg-hidden-wrap');
+  if (!mgId) {
+    document.getElementById('mg-total-bar').style.display = 'none';
+    document.getElementById('mg-info-card').style.display = 'none';
+    document.getElementById('mg-assignee-card').style.display = 'none';
+    document.getElementById('mg-schedule-card').style.display = 'none';
+    document.getElementById('mg-empty').style.display = 'block';
+    hw.style.display = 'none';
+    return;
+  }
+  document.getElementById('mg-empty').style.display = 'none';
+  const proj = projects.find(p => p.id === mgId);
+  const editProjBtn = document.getElementById('mg-proj-edit-btn');
+  if (cu) {
+    hw.style.display = 'flex';
+    document.getElementById('mg-hidden-chk').checked = proj?.hidden || false;
+    if (editProjBtn) editProjBtn.style.display = '';
+  } else {
+    hw.style.display = 'none';
+    if (editProjBtn) editProjBtn.style.display = 'none';
+  }
+  renderManage();
+}
+
+function renderManage() {
+  if (!mgId) return;
+  // 진행률 배너
+  const tp = calcTotalPct(mgId), col = pctCol(tp);
+  document.getElementById('mg-pct-num').textContent = tp + '%';
+  document.getElementById('mg-pct-num').style.color = col;
+  document.getElementById('mg-pct-fill').style.width = tp + '%';
+  document.getElementById('mg-pct-fill').style.background = col;
+  const countPhases = PHASES.filter(p => p.phase !== 0);
+  const dc = countPhases.reduce((a,p) => a + (calcPhasePct(mgId,p.phase)===100?1:0), 0);
+  document.getElementById('mg-pct-label').textContent = dc + ' / ' + countPhases.length + ' 단계 완료';
+  document.getElementById('mg-total-bar').style.display = 'flex';
+  document.getElementById('mg-info-card').style.display = 'block';
+  document.getElementById('mg-assignee-card').style.display = 'block';
+  document.getElementById('mg-schedule-card').style.display = 'block';
+  renderInfoCard();
+  renderAsgCard();
+  renderSchedTable();
+}
+
+// 기본정보 카드 (포트수/수량/인증명)
+const INFO_FIELDS = [
+  { key:'port_count', label:'포트수' },
+  { key:'quantity',   label:'수량' },
+  { key:'cert_name',  label:'인증명' },
+];
+let editInfo = false;
+function renderInfoCard() {
+  const proj = projects.find(p => p.id === mgId) || {};
+  const btn = document.getElementById('mg-info-btn');
+  if (btn) btn.style.display = cu ? '' : 'none';
+  if (editInfo && cu) {
+    const fields = INFO_FIELDS.map(f =>
+      '<div class="assignee-item"><label>' + f.label + '</label>' +
+      '<input type="text" id="info-' + f.key + '" value="' + escHtml(proj[f.key]??'') + '" placeholder="' + f.label + '" style="padding:6px 10px;font-size:12px;width:100%" /></div>'
+    ).join('');
+    document.getElementById('mg-info-body').innerHTML =
+      '<div class="assignee-grid">' + fields + '</div>' +
+      '<div style="padding:0 18px 14px;display:flex;gap:8px">' +
+      '<button class="save-btn" onclick="saveInfo()">저장</button>' +
+      '<button class="cancel-btn" onclick="cancelInfo()">취소</button></div>';
+    if (btn) btn.style.display = 'none';
+  } else {
+    const fields = INFO_FIELDS.map(f =>
+      '<div class="assignee-item"><label>' + f.label + '</label>' +
+      '<span class="assignee-val' + (proj[f.key]?'':' empty') + '">' + (proj[f.key]?escHtml(proj[f.key]):'미지정') + '</span></div>'
+    ).join('');
+    document.getElementById('mg-info-body').innerHTML = '<div class="assignee-grid">' + fields + '</div>';
+    if (btn) btn.style.display = cu ? '' : 'none';
+  }
+}
+function startEditInfo() { editInfo = true; renderInfoCard(); }
+function cancelInfo()    { editInfo = false; renderInfoCard(); }
+async function saveInfo() {
+  if (!cu || !mgId) return;
+  const row = {
+    port_count: document.getElementById('info-port_count')?.value.trim() || null,
+    quantity:   document.getElementById('info-quantity')?.value.trim() || null,
+    cert_name:  document.getElementById('info-cert_name')?.value.trim() || null,
+  };
+  const { error } = await sb.from('projects').update(row).eq('id', mgId);
+  if (error) { alert('저장 실패: ' + error.message); return; }
+  const proj = projects.find(p => p.id === mgId);
+  if (proj) Object.assign(proj, row);
+  editInfo = false; renderInfoCard();
+}
+
+// 담당자 카드
+function renderAsgCard() {
+  const pd = allPD[mgId]?.[1] || {};
+  const btn = document.getElementById('mg-asg-btn');
+  if (btn) btn.style.display = cu ? '' : 'none';
+  if (editAsg && cu) {
+    const fields = ASGN.map(f =>
+      '<div class="assignee-item"><label>' + f.label + '</label>' +
+      '<input type="text" id="asg-' + f.key + '" value="' + escHtml(pd[f.key]||'') + '" placeholder="' + f.label + '" style="padding:6px 10px;font-size:12px;width:100%" /></div>'
+    ).join('');
+    document.getElementById('mg-asg-body').innerHTML =
+      '<div class="assignee-grid">' + fields + '</div>' +
+      '<div style="padding:0 18px 14px;display:flex;gap:8px">' +
+      '<button class="save-btn" onclick="saveAsg()">저장</button>' +
+      '<button class="cancel-btn" onclick="cancelAsg()">취소</button></div>';
+    if (btn) btn.style.display = 'none';
+  } else {
+    const fields = ASGN.map(f =>
+      '<div class="assignee-item"><label>' + f.label + '</label>' +
+      '<span class="assignee-val' + (pd[f.key]?'':' empty') + '">' + (pd[f.key]?escHtml(pd[f.key]):'미지정') + '</span></div>'
+    ).join('');
+    document.getElementById('mg-asg-body').innerHTML = '<div class="assignee-grid">' + fields + '</div>';
+    if (btn) btn.style.display = cu ? '' : 'none';
+  }
+}
+function startEditAsg() { editAsg = true; renderAsgCard(); }
+function cancelAsg()    { editAsg = false; renderAsgCard(); }
+async function saveAsg() {
+  if (!cu || !mgId) return;
+  const pd = allPD[mgId]?.[1] || {};
+  const row = { project_id: mgId, phase: 1, updated_at: new Date().toISOString(),
+    plan_date: pd.plan_date||null, end_date: pd.end_date||null, done: pd.done||false };
+  ASGN.forEach(f => { row[f.key] = document.getElementById('asg-'+f.key)?.value.trim()||null; });
+  if (pd.id) { await sb.from('pjt_phases').update(row).eq('id', pd.id); }
+  else {
+    const { data } = await sb.from('pjt_phases').insert(row).select().single();
+    if (data) { allPD[mgId] = allPD[mgId]||{}; allPD[mgId][1] = data; }
+  }
+  await loadAllPhaseData();
+  editAsg = false; renderAsgCard();
+}
+
+// 일정 테이블
+// ── 한국 공휴일 (2024~2026) ──
+const KR_HOLIDAYS = new Set([
+  // 2024
+  '2024-01-01','2024-02-09','2024-02-10','2024-02-11','2024-02-12',
+  '2024-03-01','2024-04-10','2024-05-05','2024-05-06','2024-05-15',
+  '2024-06-06','2024-08-15','2024-09-16','2024-09-17','2024-09-18',
+  '2024-10-03','2024-10-09','2024-12-25',
+  // 2025
+  '2025-01-01','2025-01-28','2025-01-29','2025-01-30',
+  '2025-03-01','2025-05-05','2025-05-06','2025-06-06',
+  '2025-08-15','2025-10-03','2025-10-06','2025-10-07','2025-10-08',
+  '2025-10-09','2025-12-25',
+  // 2026
+  '2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19',
+  '2026-03-01','2026-03-02','2026-05-05','2026-05-25',
+  '2026-06-06','2026-08-17','2026-09-24','2026-09-25','2026-09-26',
+  '2026-10-05','2026-10-09','2026-12-25',
+]);
+
+// working day 계산 (주말·공휴일 제외)
+function workingDays(from, to) {
+  if (!from || !to) return null;
+  const d1 = new Date(from + 'T00:00:00');
+  const d2 = new Date(to   + 'T00:00:00');
+  if (d2 <= d1) return 0;
+  let count = 0;
+  const cur = new Date(d1);
+  cur.setDate(cur.getDate() + 1); // from 다음날부터
+  while (cur <= d2) {
+    const dow = cur.getDay();
+    const ds  = cur.toISOString().slice(0,10);
+    if (dow !== 0 && dow !== 6 && !KR_HOLIDAYS.has(ds)) count++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+function renderSchedTable() {
+  const today = new Date().toISOString().slice(0,10);
+  let rows = '';
+  // 직전 항목의 plan_date / end_date 추적
+  let prevPlan = null, prevEnd = null;
+
+  // 모든 항목을 순서대로 펼쳐서 직전 날짜 추적
+  // (대분류 소분류 없는 것도 포함)
+  PHASES.forEach(p => {
+    const pp = calcPhasePct(mgId, p.phase), isDonePhase = pp >= 100;
+    const pc = pctCol(pp);
+
+    if (p.subs.length === 0) {
+      // 소분류 없는 대분류: 직접 날짜 관리
+      const pd = allPD[mgId]?.[p.phase] || {};
+      const curPlan = pd.plan_date || null;
+      const curEnd  = pd.end_date  || null;
+      const dn      = pd.done      || false;
+
+      // 소요일 계산
+      const daysHtml = makeDaysHtml(prevPlan, prevEnd, curPlan, curEnd, dn);
+
+      rows += '<tr class="row-phase' + (isDonePhase?' row-done':'') + '">' +
+        '<td>' +
+          '<span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;background:' +
+            (isDonePhase?'#D1FAE5':'var(--primary-light)') + ';color:' + (isDonePhase?'#065F46':'var(--primary)') + '">' +
+            p.phase + '단계</span> ' +
+          '<span style="font-weight:700">' + escHtml(p.name) + '</span> ' +
+          '<span style="font-size:11px;color:' + pc + ';font-weight:700">' + pp + '%</span>' +
+        '</td>' +
+        '<td style="text-align:center">' + mkChk('ph',p.phase,'',dn) + '</td>' +
+        '<td style="text-align:center">' + mkDateInp('ph',p.phase,'','plan',curPlan||'') + '</td>' +
+        '<td style="text-align:center">' + mkDateInp('ph',p.phase,'','end', curEnd||'')  + '</td>' +
+        '<td style="text-align:center">' + daysHtml + '</td>' +
+        '<td>' + phaseRemark(p, today) + '</td>' +
+      '</tr>';
+
+      // 직전 날짜 업데이트
+      if (curPlan) prevPlan = curPlan;
+      if (curEnd)  prevEnd  = curEnd;
+
+    } else {
+      // 소분류 있는 대분류: 헤더 행
+      rows += '<tr class="row-phase' + (isDonePhase?' row-done':'') + '">' +
+        '<td>' +
+          '<span style="font-size:11px;font-weight:700;padding:2px 7px;border-radius:10px;background:' +
+            (isDonePhase?'#D1FAE5':'var(--primary-light)') + ';color:' + (isDonePhase?'#065F46':'var(--primary)') + '">' +
+            p.phase + '단계</span> ' +
+          '<span style="font-weight:700">' + escHtml(p.name) + '</span> ' +
+          '<span style="font-size:11px;color:' + pc + ';font-weight:700">' + pp + '%</span>' +
+        '</td>' +
+        '<td></td>' +
+        '<td style="text-align:center">' + sumDate(p,'plan') + '</td>' +
+        '<td style="text-align:center">' + sumDate(p,'end')  + '</td>' +
+        '<td></td><td>' + phaseRemark(p, today) + '</td>' +
+      '</tr>';
+
+      // 소분류 행 (직전 날짜 연속 추적)
+      p.subs.forEach(sub => {
+        const key = p.phase+'::'+sub;
+        const sd  = allSD[mgId]?.[key] || {};
+        const hasSetup = (setupByProj[mgId]||[]).length > 0;
+        const is71 = (p.phase === 7 && sub === '7-1. 셋업');
+        const is72 = (p.phase === 7 && sub === '7-2. 셋업보고서 상신');
+
+        // 7단계 index 연동 시 완료 여부 override
+        let dn, curPlan, curEnd;
+        if (hasSetup && is71) {
+          const pct71 = calcSetup71Raw(mgId);
+          dn = pct71 >= 100;
+          curPlan = sd.plan_date||null;
+          curEnd  = sd.end_date||null;
+        } else if (hasSetup && is72) {
+          dn = calcSetup72Raw(mgId) === 100;
+          curPlan = sd.plan_date||null;
+          curEnd  = sd.end_date||null;
+        } else {
+          dn = sd.done||false;
+          curPlan = sd.plan_date||null;
+          curEnd  = sd.end_date||null;
+        }
+
+        const daysHtml = makeDaysHtml(prevPlan, prevEnd, curPlan, curEnd, dn);
+
+        // 7단계 index 연동 시 완료 셀에 진행률 표시
+        let chkCell;
+        if (hasSetup && is71) {
+          const pct71 = calcSetup71Raw(mgId);
+          chkCell = '<div style="font-size:11px;font-weight:700;color:' + pctCol(pct71) + '">' + pct71 + '%</div>' +
+                    '<div style="font-size:10px;color:var(--muted)">index</div>';
+        } else if (hasSetup && is72) {
+          const pct72 = calcSetup72Raw(mgId);
+          chkCell = dn
+            ? '<span style="color:var(--success);font-size:13px">✓</span>'
+            : '<span style="font-size:11px;color:var(--muted)">미완료</span>';
+          chkCell += '<div style="font-size:10px;color:var(--muted)">index</div>';
+        } else {
+          chkCell = mkChk('sb',p.phase,sub,dn);
+        }
+
+        rows += '<tr class="row-sub' + (dn?' row-done':'') + '">' +
+          '<td class="sub-label">' + escHtml(sub) + '</td>' +
+          '<td style="text-align:center">' + chkCell + '</td>' +
+          '<td style="text-align:center">' + mkDateInp('sb',p.phase,sub,'plan',curPlan||'') + '</td>' +
+          '<td style="text-align:center">' + mkDateInp('sb',p.phase,sub,'end', curEnd||'')  + '</td>' +
+          '<td style="text-align:center">' + daysHtml + '</td>' +
+          '<td>' + remark(curPlan,curEnd,dn,today) + '</td>' +
+        '</tr>';
+
+        // 직전 날짜 업데이트
+        if (curPlan) prevPlan = curPlan;
+        if (curEnd)  prevEnd  = curEnd;
+      });
+    }
+  });
+  document.getElementById('mg-sched-tbody').innerHTML = rows;
+}
+
+// 소요일 HTML 생성: 직전→현재, 예상(계획일 기준)과 실제(실행일 기준) 구분 표시
+function makeDaysHtml(prevPlan, prevEnd, curPlan, curEnd, isDone) {
+  // 실제 소요일: 직전 실행일 → 현재 실행일
+  const actualDays = (prevEnd && curEnd) ? workingDays(prevEnd, curEnd) : null;
+  // 예상 소요일: 직전 계획일 → 현재 계획일
+  const planDays   = (prevPlan && curPlan) ? workingDays(prevPlan, curPlan) : null;
+
+  if (actualDays === null && planDays === null) return '<span style="font-size:11px;color:var(--muted)">–</span>';
+
+  // 실제 소요일이 있으면 실제만 표시, 없을 때만 예상 표시
+  if (actualDays !== null) {
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:1px">' +
+      '<div style="font-size:12px;font-weight:700;color:var(--text)">' + actualDays + '일</div>' +
+      '<div style="font-size:10px;color:var(--muted)">실제</div>' +
+    '</div>';
+  }
+  return '<div style="display:flex;flex-direction:column;align-items:center;gap:1px">' +
+    '<div style="font-size:11px;color:var(--muted)">' + planDays + '일</div>' +
+    '<div style="font-size:10px;color:var(--muted)">예상</div>' +
+  '</div>';
+}
+
+function mkChk(t, ph, sub, dn) {
+  if (!cu) return dn ? '<span style="color:var(--success)">✓</span>' : '';
+  return '<input type="checkbox" class="done-chk"' + (dn?' checked':'') +
+    ' onchange="saveDone(\'' + t + '\',' + ph + ',\'' + escJs(sub) + '\',this.checked)" />';
+}
+function mkDateInp(t, ph, sub, fld, val) {
+  if (!cu) return val ? '<span style="font-size:12px">' + fmtDate(val) + '</span>' : '<span style="font-size:12px;color:var(--muted)">–</span>';
+  const id = 'di-' + t + '-' + ph + '-' + safeId(sub||'x') + '-' + fld;
+  return '<input type="date" class="date-inp" id="' + id + '" value="' + val + '" onchange="saveDate(\'' + t + '\',' + ph + ',\'' + escJs(sub||'') + '\',\'' + fld + '\',this.value)" />';
+}
+function sumDate(p, fld) {
+  const dates = p.subs.map(s => allSD[mgId]?.[p.phase+'::'+s]?.[fld+'_date']).filter(Boolean).sort();
+  if (!dates.length) return '<span style="font-size:11px;color:var(--muted)">–</span>';
+  const f = fmtDate(dates[0]), l = fmtDate(dates[dates.length-1]);
+  return '<span style="font-size:11px;color:var(--muted)">' + (f===l?f:f+'~'+l) + '</span>';
+}
+// calcDays 제거 → makeDaysHtml / workingDays 로 대체
+function remark(plan, end, dn, today) {
+  if (!plan) return '';
+  if (dn && end) {
+    const d = Math.round((new Date(end)-new Date(plan))/86400000);
+    if (d > 0) return '<span class="chip chip-over">⚠ ' + d + '일 초과</span>';
+    if (d < 0) return '<span class="chip chip-early">▲ ' + Math.abs(d) + '일 단축</span>';
+    return '<span class="chip chip-exact">✓ 일정 준수</span>';
+  }
+  if (!dn && plan < today) {
+    const d = Math.round((new Date(today)-new Date(plan))/86400000);
+    return '<span class="chip chip-over">⏰ ' + d + '일 지연</span>';
+  }
+  if (!dn && plan >= today) return '<span style="font-size:11px;color:var(--muted)">진행 예정</span>';
+  return '';
+}
+function phaseRemark(p, today) {
+  if (p.subs.length > 0) {
+    const allDn = p.subs.every(s => allSD[mgId]?.[p.phase+'::'+s]?.done);
+    const anyLate = p.subs.some(s => { const sd=allSD[mgId]?.[p.phase+'::'+s]||{}; return !sd.done&&sd.plan_date&&sd.plan_date<today; });
+    if (allDn)   return '<span class="chip chip-exact">✓ 완료</span>';
+    if (anyLate) return '<span class="chip chip-over">⏰ 지연 항목 있음</span>';
+    return '';
+  }
+  const pd = allPD[mgId]?.[p.phase]||{};
+  return remark(pd.plan_date, pd.end_date, pd.done||false, today);
+}
+
+async function saveDate(t, ph, sub, fld, val) {
+  if (!cu || !mgId) return;
+  // 실행일 입력 시 자동 완료 처리 (val 있으면 done=true, 지우면 done=false)
+  const autoComplete = fld === 'end';
+  if (t === 'ph') {
+    const pd = allPD[mgId]?.[ph]||{};
+    const row = { project_id:mgId, phase:ph,
+      done: autoComplete ? !!val : (pd.done||false),
+      updated_at:new Date().toISOString(),
+      plan_date: fld==='plan'?(val||null):(pd.plan_date||null),
+      end_date:  fld==='end' ?(val||null):(pd.end_date||null) };
+    ASGN.forEach(f => { row[f.key]=pd[f.key]||null; });
+    if (pd.id) { await sb.from('pjt_phases').update(row).eq('id',pd.id); }
+    else { const {data}=await sb.from('pjt_phases').insert(row).select().single(); if(data){allPD[mgId]=allPD[mgId]||{};allPD[mgId][ph]=data;} }
+    await loadAllPhaseData();
+  } else {
+    const key=ph+'::'+sub, sd=allSD[mgId]?.[key]||{};
+    const row={project_id:mgId,phase:ph,sub_phase:sub,
+      done: autoComplete ? !!val : (sd.done||false),
+      updated_at:new Date().toISOString(),
+      plan_date:fld==='plan'?(val||null):(sd.plan_date||null),
+      end_date: fld==='end' ?(val||null):(sd.end_date||null)};
+    await sb.from('pjt_sub_phases').upsert(row,{onConflict:'project_id,phase,sub_phase'});
+    allSD[mgId]=allSD[mgId]||{}; allSD[mgId][key]=row;
+  }
+  renderManage(); renderOverview();
+}
+
+async function saveDone(t, ph, sub, checked) {
+  if (!cu || !mgId) return;
+  if (t === 'ph') {
+    const pd=allPD[mgId]?.[ph]||{};
+    const row={project_id:mgId,phase:ph,done:checked,updated_at:new Date().toISOString(),
+      plan_date:pd.plan_date||null, end_date:pd.end_date||null};
+    ASGN.forEach(f=>{row[f.key]=pd[f.key]||null;});
+    if (pd.id){await sb.from('pjt_phases').update(row).eq('id',pd.id);}
+    else{const{data}=await sb.from('pjt_phases').insert(row).select().single();if(data){allPD[mgId]=allPD[mgId]||{};allPD[mgId][ph]=data;}}
+    await loadAllPhaseData();
+  } else {
+    const key=ph+'::'+sub, sd=allSD[mgId]?.[key]||{};
+    const row={project_id:mgId,phase:ph,sub_phase:sub,done:checked,updated_at:new Date().toISOString(),
+      plan_date:sd.plan_date||null,end_date:sd.end_date||null};
+    await sb.from('pjt_sub_phases').upsert(row,{onConflict:'project_id,phase,sub_phase'});
+    allSD[mgId]=allSD[mgId]||{}; allSD[mgId][key]=row;
+  }
+  renderManage(); renderOverview();
+}
+
+// ──────────────────────────────────────────
+// 인원 관리
+// ──────────────────────────────────────────
+async function loadMembers() {
+  members = []; assignments = []; myMember = null;
+  try {
+    const { data: mb, error: e1 } = await sb.from('pjt_members').select('*').order('role').order('name');
+    if (e1) { console.warn('pjt_members 조회 실패:', e1.message); }
+    else members = mb || [];
+  } catch(e) { console.warn('pjt_members 오류:', e.message); }
+  try {
+    const { data: asgn, error: e2 } = await sb.from('pjt_assignments').select('*');
+    if (e2) { console.warn('pjt_assignments 조회 실패:', e2.message); }
+    else assignments = asgn || [];
+  } catch(e) { console.warn('pjt_assignments 오류:', e.message); }
+  myMember = cu ? (members.find(m => m.user_id === cu.id) || members.find(m => m.email === cu.email) || null) : null;
+}
+
+function renderMembers() {
+  const addBtn = document.getElementById('mb-add-btn');
+  if (addBtn) addBtn.style.display = cu ? '' : 'none';
+
+  const managers = members.filter(m => m.role === 'manager');
+  const workers  = members.filter(m => m.role === 'worker');
+
+  document.getElementById('mb-count').textContent = '총 ' + members.length + '명';
+  document.getElementById('mb-managers').innerHTML = renderMemberGrid(managers);
+  document.getElementById('mb-workers').innerHTML  = renderMemberGrid(workers);
+}
+
+function renderMemberGrid(list) {
+  if (!list.length) return '<div style="color:var(--muted);font-size:13px;padding:8px 0">등록된 인원이 없습니다</div>';
+  const colors = ['#4F46E5','#10B981','#F59E0B','#EF4444','#8B5CF6','#EC4899','#06B6D4'];
+  return '<div class="member-grid">' + list.map((m, i) => {
+    const color = colors[i % colors.length];
+    const initial = (m.name||'?')[0];
+    const projCount = assignments.filter(a => a.member_id === m.id).length;
+    const editBtn = cu ? '<button class="edit-btn" style="margin-top:6px;font-size:10px" onclick="event.stopPropagation();showMemberModal(\'' + m.id + '\')">편집</button>' : '';
+    return '<div class="member-card">' +
+      '<div class="member-avatar" style="background:' + color + '">' + initial + '</div>' +
+      '<div class="member-info">' +
+        '<div class="member-name">' + escHtml(m.name) + '</div>' +
+        '<div class="member-meta">' + (m.team ? escHtml(m.team) + ' · ' : '') + '담당 프로젝트 ' + projCount + '건</div>' +
+        '<span class="member-badge ' + (m.role==='manager'?'badge-manager':'badge-worker') + '">' + (m.role==='manager'?'관리자':'작업자') + '</span>' +
+        editBtn +
+      '</div></div>';
+  }).join('') + '</div>';
+}
+
+function showMemberModal(id) {
+  if (!cu) { showLoginModal(); return; }
+  document.getElementById('mb-err').textContent = '';
+  if (id) {
+    const m = members.find(x => x.id === id);
+    if (!m) return;
+    document.getElementById('mb-modal-title').textContent = '👥 인원 편집';
+    document.getElementById('mb-edit-id').value = m.id;
+    document.getElementById('mb-name').value  = m.name || '';
+    document.getElementById('mb-email').value = m.email || '';
+    document.getElementById('mb-role').value  = m.role || 'worker';
+    document.getElementById('mb-team').value  = m.team || '';
+  } else {
+    document.getElementById('mb-modal-title').textContent = '👥 인원 추가';
+    document.getElementById('mb-edit-id').value = '';
+    document.getElementById('mb-name').value  = '';
+    document.getElementById('mb-email').value = '';
+    document.getElementById('mb-role').value  = 'worker';
+    document.getElementById('mb-team').value  = '';
+  }
+  document.getElementById('mb-modal').style.display = 'flex';
+}
+
+async function saveMember() {
+  if (!cu) return;
+  const editId = document.getElementById('mb-edit-id').value;
+  const name   = document.getElementById('mb-name').value.trim();
+  const email  = document.getElementById('mb-email').value.trim();
+  const role   = document.getElementById('mb-role').value;
+  const team   = document.getElementById('mb-team').value.trim();
+  if (!name) { document.getElementById('mb-err').textContent = '이름을 입력해주세요'; return; }
+
+  // 이메일로 auth.users에서 user_id 찾기 시도
+  let userId = null;
+  if (email) {
+    const found = members.find(m => m.email === email);
+    if (found) userId = found.user_id;
+    // profiles 테이블에서 찾기
+    else {
+      const { data: prof } = await sb.from('profiles').select('id').eq('id', cu.id).single();
+      // 직접 이메일로 user_id 조회는 admin API 필요 → 입력값만 저장
+    }
+  }
+
+  const row = { name, role, team: team||null, email: email||null };
+  if (userId) row.user_id = userId;
+
+  let error;
+  if (editId) {
+    ({ error } = await sb.from('pjt_members').update(row).eq('id', editId));
+  } else {
+    ({ error } = await sb.from('pjt_members').insert(row));
+  }
+  if (error) { document.getElementById('mb-err').textContent = '저장 실패: ' + error.message; return; }
+  document.getElementById('mb-modal').style.display = 'none';
+  await loadMembers();
+  renderMembers();
+}
+
+// ──────────────────────────────────────────
+// 작업 관리
+// ──────────────────────────────────────────
+async function renderWork() {
+  if (!cu) {
+    document.getElementById('wk-empty').style.display = 'block';
+    document.getElementById('wk-worker-section').style.display = 'none';
+    document.getElementById('wk-manager-section').style.display = 'none';
+    return;
+  }
+  document.getElementById('wk-empty').style.display = 'none';
+
+  // 현재 로그인 사용자 멤버 정보
+  if (!myMember) await loadMembers();
+  const me = myMember;
+
+  // 배너
+  const banner = document.getElementById('wk-banner');
+  banner.style.display = 'flex';
+  banner.style.flexDirection = 'row';
+  document.getElementById('wk-my-name').textContent = me ? me.name : cu.email;
+  document.getElementById('wk-my-role').textContent = me ? (me.role==='manager'?'관리자':'작업자') : '미등록';
+
+  if (me && me.role === 'manager') {
+    // 관리자 뷰
+    document.getElementById('wk-worker-section').style.display = 'none';
+    document.getElementById('wk-manager-section').style.display = 'block';
+    renderManagerView();
+  } else {
+    // 작업자 뷰
+    document.getElementById('wk-worker-section').style.display = 'block';
+    document.getElementById('wk-manager-section').style.display = 'none';
+    renderWorkerView(me);
+  }
+}
+
+function renderWorkerView(me) {
+  // 내 프로젝트: 담당자 칸에 이름이 있거나 배정된 프로젝트
+  const myName = me?.name || '';
+  const assignedIds = me ? assignments.filter(a => a.member_id === me.id).map(a => a.project_id) : [];
+
+  const myProjects = projects.filter(p => {
+    if (p.hidden) return false;
+    if (assignedIds.includes(p.id)) return true;
+    // 담당자 칸에 이름 포함 여부
+    const pd = allPD[p.id] || {};
+    if (!myName) return false;
+    return Object.values(pd).some(phase =>
+      ASGN.some(f => phase[f.key] && phase[f.key].includes(myName))
+    );
+  });
+
+  document.getElementById('wk-my-pjts').textContent = myProjects.length + '건';
+
+  if (!myProjects.length) {
+    document.getElementById('wk-my-projects').innerHTML =
+      '<div class="loading-text" style="padding:30px">담당 프로젝트가 없습니다</div>';
+    return;
+  }
+
+  document.getElementById('wk-my-projects').innerHTML = myProjects.map(proj => {
+    const tp = calcTotalPct(proj.id), col = pctCol(tp), bg = pctBg(tp);
+    return '<div class="work-proj-card" id="wkp-' + safeId(proj.id) + '">' +
+      '<div class="work-proj-header" onclick="toggleWkProj(\'' + proj.id + '\')">'+  
+        '<div style="flex:1">' +
+          '<div class="work-proj-name">' + escHtml(proj.name) + '</div>' +
+          '<div style="margin-top:6px;display:flex;align-items:center;gap:8px">' +
+            '<div style="width:120px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">' +
+              '<div style="width:' + tp + '%;height:100%;background:' + col + ';border-radius:3px"></div></div>' +
+            '<span style="font-size:12px;font-weight:700;color:' + col + '">' + tp + '%</span>' +
+          '</div>' +
+        '</div>' +
+        '<span style="font-size:11px;color:var(--muted)">▼</span>' +
+      '</div>' +
+      '<div id="wkp-body-' + safeId(proj.id) + '" style="display:none;border-top:1px solid var(--border)">' +
+        renderWorkerSchedule(proj.id) +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function renderWorkerSchedule(pid) {
+  const today = new Date().toISOString().slice(0,10);
+  let rows = '';
+  PHASES.forEach(p => {
+    const pp = calcPhasePct(pid, p.phase);
+    rows += '<tr style="background:#F8FAFC">' +
+      '<td style="padding:8px 14px;font-weight:700;font-size:12px;border-bottom:1px solid #F1F5F9" colspan="4">' +
+        '<span style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;background:' + (pp>=100?'#D1FAE5':'var(--primary-light)') + ';color:' + (pp>=100?'#065F46':'var(--primary)') + ';margin-right:6px">' + p.phase + '단계</span>' +
+        escHtml(p.name) + ' <span style="color:' + pctCol(pp) + ';font-size:11px">' + pp + '%</span>' +
+      '</td></tr>';
+
+    const allItems = p.subs.length > 0 ? p.subs : [null];
+    allItems.forEach(sub => {
+      const key = sub ? p.phase+'::'+sub : null;
+      const sd  = key ? (allSD[pid]?.[key]||{}) : (allPD[pid]?.[p.phase]||{});
+      const dn  = sd.done||false;
+      const planDate = sd.plan_date||'', endDate = sd.end_date||'';
+      const label = sub || p.name;
+      const isSetupLinked = p.phase===7 && (setupByProj[pid]||[]).length>0;
+
+      rows += '<tr style="' + (dn?'opacity:.6':'') + '">' +
+        '<td style="padding:8px 14px 8px 28px;border-bottom:1px solid #F1F5F9;font-size:12px' + (dn?';text-decoration:line-through;color:var(--muted)':'') + '">' + escHtml(label) + '</td>' +
+        '<td style="padding:8px 10px;border-bottom:1px solid #F1F5F9;text-align:center">' +
+          (isSetupLinked
+            ? '<span style="font-size:11px;color:var(--muted)">index 연동</span>'
+            : (cu ? '<input type="checkbox" class="done-chk"' + (dn?' checked':'') +
+                ' onchange="wkSaveDone(\'' + pid + '\',\'' + (sub?'sb':'ph') + '\',' + p.phase + ',\'' + escJs(sub||'') + '\',this.checked)" />' : (dn?'✓':''))
+          ) +
+        '</td>' +
+        '<td style="padding:8px 10px;border-bottom:1px solid #F1F5F9;text-align:center">' +
+          (cu && !isSetupLinked
+            ? '<input type="date" class="date-inp" value="' + planDate + '" onchange="wkSaveDate(\'' + pid + '\',\'' + (sub?'sb':'ph') + '\',' + p.phase + ',\'' + escJs(sub||'') + '\',\'plan\',this.value)" />'
+            : (planDate ? '<span style="font-size:12px">' + fmtDate(planDate) + '</span>' : '<span style="color:var(--muted);font-size:12px">–</span>')) +
+        '</td>' +
+        '<td style="padding:8px 10px;border-bottom:1px solid #F1F5F9;text-align:center">' +
+          (cu && !isSetupLinked
+            ? '<input type="date" class="date-inp" value="' + endDate + '" onchange="wkSaveDate(\'' + pid + '\',\'' + (sub?'sb':'ph') + '\',' + p.phase + ',\'' + escJs(sub||'') + '\',\'end\',this.value)" />'
+            : (endDate ? '<span style="font-size:12px">' + fmtDate(endDate) + '</span>' : '<span style="color:var(--muted);font-size:12px">–</span>')) +
+        '</td>' +
+      '</tr>';
+    });
+  });
+
+  return '<table style="width:100%;border-collapse:collapse;font-size:12px">' +
+    '<thead><tr style="background:#4F46E5;color:#fff">' +
+      '<th style="padding:8px 14px;text-align:left;font-size:11px">항목</th>' +
+      '<th style="padding:8px 10px;text-align:center;font-size:11px;width:60px">완료</th>' +
+      '<th style="padding:8px 10px;text-align:center;font-size:11px;width:130px">계획일</th>' +
+      '<th style="padding:8px 10px;text-align:center;font-size:11px;width:130px">실행일</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>';
+}
+
+function toggleWkProj(pid) {
+  const body = document.getElementById('wkp-body-' + safeId(pid));
+  if (!body) return;
+  body.style.display = body.style.display === 'none' ? 'block' : 'none';
+}
+
+async function wkSaveDone(pid, t, ph, sub, checked) {
+  await saveDone(t==='sb'?'sb':'ph', ph, sub, checked);
+  // 작업자 뷰 해당 프로젝트 새로고침
+  const body = document.getElementById('wkp-body-' + safeId(pid));
+  if (body && body.style.display !== 'none') body.innerHTML = renderWorkerSchedule(pid);
+  renderOverview();
+}
+async function wkSaveDate(pid, t, ph, sub, fld, val) {
+  await saveDate(t==='sb'?'sb':'ph', ph, sub, fld, val);
+  const body = document.getElementById('wkp-body-' + safeId(pid));
+  if (body && body.style.display !== 'none') body.innerHTML = renderWorkerSchedule(pid);
+  renderOverview();
+}
+
+function renderManagerView() {
+  document.getElementById('wk-my-pjts').textContent = projects.filter(p=>!p.hidden).length + '건 (전체)';
+  renderDistribution();
+  renderAssignments();
+}
+
+function renderDistribution() {
+  const workers = members.filter(m => m.role === 'worker');
+  if (!workers.length) {
+    document.getElementById('wk-dist-body').innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px">등록된 작업자가 없습니다</div>';
+    return;
+  }
+  let html = '<table class="dist-table"><thead><tr>' +
+    '<th style="width:120px">팀원</th><th style="width:60px">담당 수</th><th>프로젝트</th><th style="width:80px">관리</th>' +
+    '</tr></thead><tbody>';
+
+  workers.forEach(m => {
+    const myAssigns = assignments.filter(a => a.member_id === m.id);
+    // 담당자 칸에 이름 포함된 프로젝트도 합산
+    const nameProjs = projects.filter(p =>
+      !p.hidden && ASGN.some(f => Object.values(allPD[p.id]||{}).some(ph => ph[f.key]?.includes(m.name)))
+    ).map(p => p.id);
+    const allProjIds = [...new Set([...myAssigns.map(a => a.project_id), ...nameProjs])];
+    const projTags = allProjIds.map(pid => {
+      const proj = projects.find(p => p.id === pid);
+      if (!proj) return '';
+      return '<span class="proj-tag" onclick="goManage(\'' + pid + '\')" title="' + escHtml(proj.name) + '">' +
+        escHtml(proj.name.length > 20 ? proj.name.slice(0,20)+'…' : proj.name) + '</span>';
+    }).join('');
+
+    const deleteLinks = myAssigns.map(a => {
+      const proj = projects.find(p => p.id === a.project_id);
+      return proj ? '<span style="font-size:10px;color:var(--danger);cursor:pointer" onclick="removeAssign(\'' + a.id + '\')" title="' + escHtml(proj.name) + ' 배정 해제">✕ ' + escHtml(proj.name.slice(0,8)) + '</span><br>' : '';
+    }).join('');
+
+    html += '<tr>' +
+      '<td><span style="font-weight:700">' + escHtml(m.name) + '</span>' +
+        '<div style="font-size:10px;color:var(--muted)">' + (m.team||'') + '</div></td>' +
+      '<td style="text-align:center;font-weight:700;color:var(--primary)">' + allProjIds.length + '</td>' +
+      '<td><div style="display:flex;flex-wrap:wrap;gap:2px">' + (projTags||'<span style="font-size:11px;color:var(--muted)">없음</span>') + '</div></td>' +
+      '<td style="font-size:11px;line-height:1.8">' + (deleteLinks||'–') + '</td>' +
+    '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('wk-dist-body').innerHTML = html;
+}
+
+function renderAssignments() {
+  if (!assignments.length) {
+    document.getElementById('wk-assign-body').innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px">배정 내역이 없습니다</div>';
+    return;
+  }
+  let html = '<table class="dist-table"><thead><tr>' +
+    '<th>프로젝트</th><th>인원</th><th>역할</th><th style="width:60px"></th>' +
+    '</tr></thead><tbody>';
+  assignments.forEach(a => {
+    const proj = projects.find(p => p.id === a.project_id);
+    const mb   = members.find(m => m.id === a.member_id);
+    if (!proj || !mb) return;
+    html += '<tr>' +
+      '<td style="font-size:12px">' + escHtml(proj.name.length>25?proj.name.slice(0,25)+'…':proj.name) + '</td>' +
+      '<td style="font-weight:600">' + escHtml(mb.name) + '</td>' +
+      '<td style="font-size:12px;color:var(--muted)">' + escHtml(a.role_in_project||'–') + '</td>' +
+      '<td><button class="cancel-btn" onclick="removeAssign(\'' + a.id + '\')">해제</button></td>' +
+    '</tr>';
+  });
+  html += '</tbody></table>';
+  document.getElementById('wk-assign-body').innerHTML = html;
+}
+
+function showAssignModal() {
+  if (!cu) { showLoginModal(); return; }
+  document.getElementById('assign-err').textContent = '';
+  document.getElementById('assign-role').value = '';
+  // 인원 목록
+  document.getElementById('assign-member').innerHTML =
+    members.map(m => '<option value="' + m.id + '">' + escHtml(m.name) + ' (' + (m.role==='manager'?'관리자':'작업자') + ')</option>').join('');
+  // 프로젝트 목록
+  document.getElementById('assign-project').innerHTML =
+    projects.filter(p=>!p.hidden).map(p => '<option value="' + p.id + '">' + escHtml(p.name) + '</option>').join('');
+  document.getElementById('assign-modal').style.display = 'flex';
+}
+
+async function saveAssignment() {
+  if (!cu) return;
+  const memberId   = document.getElementById('assign-member').value;
+  const projectId  = document.getElementById('assign-project').value;
+  const roleInProj = document.getElementById('assign-role').value.trim();
+  if (!memberId || !projectId) { document.getElementById('assign-err').textContent = '인원과 프로젝트를 선택해주세요'; return; }
+  const { error } = await sb.from('pjt_assignments').upsert(
+    { member_id: memberId, project_id: projectId, role_in_project: roleInProj||null },
+    { onConflict: 'project_id,member_id' }
+  );
+  if (error) { document.getElementById('assign-err').textContent = '저장 실패: ' + error.message; return; }
+  document.getElementById('assign-modal').style.display = 'none';
+  await loadMembers();
+  renderManagerView();
+}
+
+async function removeAssign(assignId) {
+  if (!cu) return;
+  if (!confirm('배정을 해제할까요?')) return;
+  await sb.from('pjt_assignments').delete().eq('id', assignId);
+  await loadMembers();
+  renderManagerView();
+}
+
+// ──────────────────────────────────────────
+// 일괄등록
+// ──────────────────────────────────────────
+let bulkAllParsed = null;  // 미리보기 후 확정 대기 중인 일괄등록 데이터
+
+// 일괄등록 줄 컬럼 정의 (24열, 순서 고정)
+// 기본정보 12열 + 날짜 12열(0단계~6단계)
+const BULK_DATE_STAGES = [
+  { phase:0, sub:null,                       label:'제품사양서' },
+  { phase:1, sub:'1-1. PJT 시작회의',        label:'PJT시작회의' },
+  { phase:1, sub:'1-2. BOM등록/구매요청',    label:'구매요청' },
+  { phase:2, sub:'2-1. 설계',                label:'설계' },
+  { phase:2, sub:'2-2. 케이스입고',          label:'케이스입고' },
+  { phase:3, sub:'3-1. 제작',                label:'조립완료' },
+  { phase:3, sub:'3-2. QC',                  label:'QC' },
+  { phase:3, sub:'3-3. 제작완료',            label:'제작완료' },
+  { phase:4, sub:'4-1. 평가이관',            label:'평가이관' },
+  { phase:4, sub:'4-2. 평가완료',            label:'평가완료' },
+  { phase:5, sub:null,                       label:'승인' },
+  { phase:6, sub:null,                       label:'납품' },
+];
+
+function renderBulkTab() {
+  const errEl = document.getElementById('bulk-all-err');
+  if (!cu) errEl.textContent = '로그인 후 이용할 수 있습니다';
+  const todayEl = document.getElementById('bulk-today-label');
+  if (todayEl) todayEl.textContent = fmtDate(new Date().toISOString().slice(0,10));
+}
+
+// 날짜 문자열을 YYYY-MM-DD로 정규화 (YY 또는 YYYY, 점/슬래시/하이픈 모두 허용)
+function normDate(s) {
+  if (!s) return null;
+  s = s.trim();
+  if (!s) return null;
+  const m = s.match(/^(\d{2,4})[.\-\/](\d{1,2})[.\-\/](\d{1,2})$/);
+  if (!m) return null;
+  let y = m[1];
+  if (y.length === 2) y = (Number(y) <= 69 ? '20' : '19') + y; // 2자리 연도 보정 (00~69→20xx)
+  const mo = m[2].padStart(2,'0'), d = m[3].padStart(2,'0');
+  return y + '-' + mo + '-' + d;
+}
+
+// 프로젝트명 끝의 코드(_S25-15-43, _R26-01-03-A 등) 추출. 코드 없으면 null
+function extractProjCode(name) {
+  if (!name) return null;
+  const m = String(name).match(/_(S|R)[A-Za-z0-9\-]+$/);
+  return m ? m[0] : null;
+}
+// 코드 기준으로 기존 프로젝트 찾기. 코드가 없으면 항상 신규(null 반환)
+function findByProjCode(name) {
+  const code = extractProjCode(name);
+  if (!code) return null;
+  return projects.find(p => extractProjCode(p.name) === code) || null;
+}
+
+// ── 일괄등록 (이미지 양식 그대로, 24열 통합) ──
+function previewBulkAll() {
+  const errEl = document.getElementById('bulk-all-err');
+  const prevEl = document.getElementById('bulk-all-preview');
+  const btn = document.getElementById('bulk-all-confirm-btn');
+  errEl.textContent = ''; prevEl.innerHTML = ''; btn.style.display = 'none'; bulkAllParsed = null;
+
+  if (!cu) { errEl.textContent = '로그인 후 이용할 수 있습니다'; return; }
+
+  const raw = document.getElementById('bulk-all-text').value;
+  const lines = raw.split('\n').map(l => l.replace(/\r$/,'')).filter(l => l.trim() !== '');
+  if (!lines.length) { errEl.textContent = '입력된 내용이 없습니다'; return; }
+
+  const today = new Date().toISOString().slice(0,10);
+  const rows = [];
+  const problems = [];
+
+  lines.forEach((line, idx) => {
+    const cols = line.split('\t');
+    const name = (cols[0]||'').trim();
+    if (!name) { problems.push((idx+1) + '번째 줄: 프로젝트명이 비어있어 건너뜁니다'); return; }
+
+    const row = {
+      name,
+      port_count: (cols[1]||'').trim() || null,
+      quantity:   (cols[2]||'').trim() || null,
+      cert_name:  (cols[3]||'').trim() || null,
+      pm:         (cols[4]||'').trim() || null,
+      designer:   (cols[5]||'').trim() || null,
+      elec:       (cols[6]||'').trim() || null,
+      chem:       (cols[7]||'').trim() || null,
+      qc:         (cols[8]||'').trim() || null,
+      evaluator:  (cols[9]||'').trim() || null,
+      program:    (cols[10]||'').trim() || null,
+      delivery:   (cols[11]||'').trim() || null,
+    };
+    if (row.port_count !== null && isNaN(Number(row.port_count))) problems.push((idx+1) + '번째 줄: 포트가 숫자가 아닙니다 ("' + row.port_count + '")');
+    if (row.quantity   !== null && isNaN(Number(row.quantity)))   problems.push((idx+1) + '번째 줄: 수량이 숫자가 아닙니다 ("' + row.quantity + '")');
+
+    // 날짜 12열 파싱 (12~23번 인덱스)
+    row.dates = BULK_DATE_STAGES.map((stage, si) => {
+      const raw = (cols[12+si]||'').trim();
+      if (!raw) return { ...stage, value:null, norm:null, done:false };
+      const norm = normDate(raw);
+      if (!norm) problems.push((idx+1) + '번째 줄 "' + stage.label + '": 날짜 형식을 인식할 수 없습니다 ("' + raw + '")');
+      const done = norm ? (norm <= today) : false; // 오늘 이전(오늘 포함)이면 완료 처리
+      return { ...stage, value: raw, norm, done };
+    });
+
+    const existing = findByProjCode(name);
+    row._existingId = existing ? existing.id : null;
+    row._existingName = existing ? existing.name : null;
+    row._mode = existing ? 'update' : 'create';
+    rows.push(row);
+  });
+
+  // 같은 붙여넣기 안 코드 중복 체크 (코드 없는 항목은 이름 그대로 체크)
+  const keyCount = {};
+  rows.forEach(r => { const k = extractProjCode(r.name) || ('noname:'+r.name); keyCount[k] = (keyCount[k]||0) + 1; });
+  const seenKeys = new Set();
+  rows.forEach(r => {
+    const k = extractProjCode(r.name) || ('noname:'+r.name);
+    if (keyCount[k] > 1 && !seenKeys.has(k)) {
+      seenKeys.add(k);
+      problems.push('입력한 내용 안에 같은 코드(' + (extractProjCode(r.name) || r.name) + ')가 ' + keyCount[k] + '번 중복됩니다. 마지막 줄 내용이 적용됩니다');
+    }
+  });
+
+  if (!rows.length) { errEl.textContent = '처리할 수 있는 프로젝트가 없습니다. ' + problems.join(' / '); return; }
+
+  const createCnt = rows.filter(r=>r._mode==='create').length;
+  const updateCnt = rows.filter(r=>r._mode==='update').length;
+
+  let html = '<div style="font-size:12px;color:var(--muted);margin-bottom:8px">' +
+    '신규 생성 <b style="color:var(--success)">' + createCnt + '개</b> · ' +
+    '기존 업데이트 <b style="color:var(--warning)">' + updateCnt + '개</b></div>';
+
+  html += '<div style="overflow-x:auto"><table class="dist-table" style="font-size:10.5px;white-space:nowrap"><thead><tr>' +
+    '<th>구분</th><th>프로젝트명</th><th>포트</th><th>수량</th><th>인증</th><th>PM</th><th>기구</th><th>전장</th><th>분석</th><th>QC</th><th>평가</th><th>프로그램</th><th>영업</th>' +
+    BULK_DATE_STAGES.map(s=>'<th>'+escHtml(s.label)+'</th>').join('') +
+    '</tr></thead><tbody>';
+  rows.forEach(r => {
+    const nameMismatch = r._mode === 'update' && r._existingName && r._existingName !== r.name;
+    html += '<tr>' +
+      '<td>' + (r._mode==='update' ? '<span style="font-size:10px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:4px">업데이트</span>' : '<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 6px;border-radius:4px">신규</span>') + '</td>' +
+      '<td style="font-weight:700;white-space:normal;min-width:160px">' + escHtml(r.name) +
+        (nameMismatch ? '<div style="font-weight:400;font-size:10px;color:var(--warning);margin-top:2px">⚠ 기존 등록명: ' + escHtml(r._existingName) + '</div>' : '') +
+        '</td>' +
+      '<td style="text-align:center">' + escHtml(r.port_count||'–') + '</td>' +
+      '<td style="text-align:center">' + escHtml(r.quantity||'–') + '</td>' +
+      '<td>' + escHtml(r.cert_name||'–') + '</td>' +
+      '<td>' + escHtml(r.pm||'–') + '</td>' +
+      '<td>' + escHtml(r.designer||'–') + '</td>' +
+      '<td>' + escHtml(r.elec||'–') + '</td>' +
+      '<td>' + escHtml(r.chem||'–') + '</td>' +
+      '<td>' + escHtml(r.qc||'–') + '</td>' +
+      '<td>' + escHtml(r.evaluator||'–') + '</td>' +
+      '<td>' + escHtml(r.program||'–') + '</td>' +
+      '<td>' + escHtml(r.delivery||'–') + '</td>' +
+      r.dates.map(d => {
+        if (!d.norm) return '<td style="text-align:center;color:#CBD5E1">–</td>';
+        const bg = d.done ? '#F0FDF4' : '#EEF2FF';
+        const col = d.done ? '#065F46' : '#4F46E5';
+        return '<td style="text-align:center;background:' + bg + ';color:' + col + ';font-weight:600">' + fmtDate(d.norm) + (d.done?' ✓':'') + '</td>';
+      }).join('') +
+    '</tr>';
+  });
+  html += '</tbody></table></div>';
+  if (problems.length) html += '<div style="margin-top:8px;font-size:11px;color:var(--warning)">⚠ ' + problems.join('<br/>⚠ ') + '</div>';
+  prevEl.innerHTML = html;
+
+  bulkAllParsed = rows;
+  btn.style.display = '';
+}
+
+async function confirmBulkAll() {
+  if (!cu || !bulkAllParsed || !bulkAllParsed.length) return;
+  const btn = document.getElementById('bulk-all-confirm-btn');
+  const errEl = document.getElementById('bulk-all-err');
+  btn.disabled = true; btn.textContent = '처리 중...';
+  errEl.textContent = '';
+
+  // 같은 코드(또는 코드 없으면 같은 이름) 여러 줄이면 마지막 줄만 적용
+  const byKey = {};
+  bulkAllParsed.forEach(r => { const k = extractProjCode(r.name) || ('noname:'+r.name); byKey[k] = r; });
+  let finalRows = Object.values(byKey);
+
+  try {
+    // 저장 직전 최신 프로젝트 목록을 다시 불러와 신규/업데이트 판정을 재검증
+    // (이전 시도가 중간에 실패해 프로젝트만 먼저 생성된 경우 등, 화면 캐시가 최신이 아닐 수 있음)
+    const { data: freshProjects, error: freshErr } = await sb.from('projects').select('*').order('created_at');
+    if (freshErr) throw freshErr;
+    projects = freshProjects || [];
+    finalRows = finalRows.map(r => {
+      const existing = findByProjCode(r.name);
+      return { ...r, _existingId: existing ? existing.id : null, _mode: existing ? 'update' : 'create' };
+    });
+
+    let createdCount = 0, updatedCount = 0;
+    const projectIdByName = {};
+
+    // 1) 기본정보(프로젝트+담당자) 신규/업데이트
+    const toCreate = finalRows.filter(r => r._mode === 'create');
+    const toUpdate = finalRows.filter(r => r._mode === 'update');
+
+    if (toCreate.length) {
+      const projRows = toCreate.map(r => ({ name: r.name, port_count: r.port_count, quantity: r.quantity, cert_name: r.cert_name }));
+      const { data: newProjects, error: pErr } = await sb.from('projects').insert(projRows).select();
+      if (pErr) throw pErr;
+      createdCount = newProjects.length;
+      newProjects.forEach((np, i) => { projectIdByName[toCreate[i].name] = np.id; });
+
+      const phaseRows = [];
+      newProjects.forEach((np, i) => {
+        const src = toCreate[i];
+        if (ASGN.some(f => src[f.key])) {
+          const row = { project_id: np.id, phase: 1, updated_at: new Date().toISOString(), done: false };
+          ASGN.forEach(f => { row[f.key] = src[f.key] || null; });
+          phaseRows.push(row);
+        }
+      });
+      if (phaseRows.length) {
+        const { error: phErr } = await sb.from('pjt_phases').insert(phaseRows);
+        if (phErr) throw phErr;
+      }
+    }
+
+    for (const r of toUpdate) {
+      const existing = projects.find(p => p.id === r._existingId);
+      if (!existing) { console.warn('[일괄등록] existing 매칭 실패:', r.name, r._existingId); continue; }
+      projectIdByName[r.name] = existing.id;
+      const projRow = {
+        name:       r.name, // 코드가 같으면 입력한 이름으로 표기를 통일
+        port_count: r.port_count !== null ? r.port_count : (existing.port_count||null),
+        quantity:   r.quantity   !== null ? r.quantity   : (existing.quantity||null),
+        cert_name:  r.cert_name  !== null ? r.cert_name  : (existing.cert_name||null),
+      };
+      console.log('[일괄등록] projects update 시도:', existing.name, '->', r.name, 'id:', existing.id, '기존값:', { port_count: existing.port_count, quantity: existing.quantity }, '신규입력값:', { port_count: r.port_count, quantity: r.quantity }, '저장할값:', projRow);
+      const { error: upErr, data: upData } = await sb.from('projects').update(projRow).eq('id', existing.id).select();
+      if (upErr) throw upErr;
+      console.log('[일괄등록] projects update 결과 (영향받은 행):', upData);
+
+      if (ASGN.some(f => r[f.key])) {
+        const pd = allPD[existing.id]?.[1] || {};
+        const phRow = { project_id: existing.id, phase: 1, updated_at: new Date().toISOString(),
+          done: pd.done||false, plan_date: pd.plan_date||null, end_date: pd.end_date||null };
+        ASGN.forEach(f => { phRow[f.key] = r[f.key] !== null ? r[f.key] : (pd[f.key]||null); });
+        if (pd.id) { const { error } = await sb.from('pjt_phases').update(phRow).eq('id', pd.id); if (error) throw error; }
+        else { const { error } = await sb.from('pjt_phases').insert(phRow); if (error) throw error; }
+      }
+      updatedCount++;
+    }
+
+    // 2) 날짜(0~6단계) 일괄 저장 — 새로 만든 프로젝트는 allPD/allSD가 비어있으므로 신규 insert 기준으로 처리
+    const phUpdates = [];   // {project_id, phase, plan_date, end_date, done}
+    const subUpserts = [];  // {project_id, phase, sub_phase, plan_date, end_date, done}
+
+    finalRows.forEach(r => {
+      const pid = projectIdByName[r.name];
+      if (!pid) { console.warn('[일괄등록] project_id를 찾지 못해 일정 저장 건너뜀:', r.name); return; }
+      const isNewProj = r._mode === 'create';
+      r.dates.forEach(d => {
+        if (!d.norm) return;
+        const planVal = d.done ? null : d.norm;
+        const endVal  = d.done ? d.norm : null;
+        if (d.sub === null) {
+          const pd = isNewProj ? {} : (allPD[pid]?.[d.phase] || {});
+          phUpdates.push({
+            _existingId: pd.id || null,
+            project_id: pid, phase: d.phase, updated_at: new Date().toISOString(),
+            done: d.done,
+            plan_date: planVal !== null ? planVal : (pd.plan_date||null),
+            end_date:  endVal  !== null ? endVal  : (pd.end_date||null),
+          });
+        } else {
+          subUpserts.push({
+            project_id: pid, phase: d.phase, sub_phase: d.sub, updated_at: new Date().toISOString(),
+            done: d.done, plan_date: planVal, end_date: endVal,
+          });
+        }
+      });
+    });
+
+    console.log('[일괄등록] phUpdates 개수:', phUpdates.length, phUpdates);
+    console.log('[일괄등록] subUpserts 개수:', subUpserts.length, subUpserts);
+
+    for (const row of phUpdates) {
+      const { _existingId, ...payload } = row;
+      if (_existingId) {
+        const { error, data } = await sb.from('pjt_phases').update(payload).eq('id', _existingId).select();
+        if (error) throw error;
+        console.log('[일괄등록] pjt_phases update 결과:', data);
+      } else {
+        const { error, data } = await sb.from('pjt_phases').insert(payload).select();
+        if (error) throw error;
+        console.log('[일괄등록] pjt_phases insert 결과:', data);
+      }
+    }
+    if (subUpserts.length) {
+      const { error, data } = await sb.from('pjt_sub_phases').upsert(subUpserts, { onConflict: 'project_id,phase,sub_phase' }).select();
+      if (error) { console.error('[일괄등록] pjt_sub_phases upsert 에러:', error); throw error; }
+      console.log('[일괄등록] pjt_sub_phases upsert 결과:', data);
+    }
+
+    document.getElementById('bulk-all-text').value = '';
+    document.getElementById('bulk-all-preview').innerHTML =
+      '<div style="color:var(--success);font-weight:700;font-size:13px">✓ 신규 ' + createdCount + '개 생성, 기존 ' + updatedCount + '개 업데이트 완료 (일정 포함)</div>';
+    btn.style.display = 'none';
+    bulkAllParsed = null;
+    await loadAll();
+    renderBulkTab();
+  } catch (e) {
+    errEl.textContent = '처리 실패: ' + e.message + ' — 일부 항목은 이미 저장됐을 수 있습니다. 다시 [미리보기]를 눌러 신규/업데이트 구분을 확인한 뒤 재시도해주세요.';
+  } finally {
+    btn.disabled = false; btn.textContent = '✓ 위 내용대로 일괄 저장';
+  }
+}
+
+// ── 유틸 ──
+function pctCol(p){ return p>=100?'#10B981':p>=50?'#4F46E5':p>0?'#F59E0B':'#CBD5E1'; }
+function pctBg(p) { return p>=100?'#F0FDF4':p>=50?'#EEF2FF':p>0?'#FEF9EC':'#F8FAFC'; }
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escJs(s)  { return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function safeId(s) { return String(s).replace(/[^a-zA-Z0-9]/g,'_'); }
+function fmtDate(d){ if(!d)return''; const dt=new Date(d+'T00:00:00'); return dt.getFullYear()+'.'+String(dt.getMonth()+1).padStart(2,'0')+'.'+String(dt.getDate()).padStart(2,'0'); }
+</script>
+</body>
+</html>
