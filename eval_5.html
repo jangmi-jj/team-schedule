@@ -1106,6 +1106,8 @@ async function loadAll(){
   renderCalendar();
   fillSelects();
   if(!document.querySelector('[id^="rw-item-"]')) addRptItem();
+  const rwDate=document.getElementById('rw-date');
+  if(rwDate && !rwDate.value) rwDate.value=todayStr();
 }
 
 // ─── 데이터 로드 ───
@@ -1215,7 +1217,11 @@ function switchTab(tab){
   });
   if(tab==='dashboard') renderDashboard();
   if(tab==='members')   renderMembers();
-  if(tab==='report')    renderReportList();
+  if(tab==='report'){
+    renderReportList();
+    const rwDate=document.getElementById('rw-date');
+    if(rwDate && !rwDate.value) rwDate.value=todayStr();
+  }
   if(tab==='calendar')  { renderCalendar(); if(calMode==='trip') renderTripCalendar(); }
   if(tab==='equip')     renderEquipTab();
   if(tab==='pjt')       renderPjtTab();
@@ -1951,6 +1957,18 @@ function onRwItemTypeChange(idx){
 function onRwPjtSearch(idx){
   const q=(document.getElementById('rw-pjt-search-'+idx)?.value||'').trim().toLowerCase();
   const drop=document.getElementById('rw-pjt-drop-'+idx);
+  // 검색창 비우면 프로젝트 선택 해제 → 설비 전체 복원
+  if(!q){
+    document.getElementById('rw-pjt-id-'+idx).value='';
+    const sel=document.getElementById('rw-equip-type-'+idx);
+    if(sel){
+      sel.innerHTML='<option value="">설비 유형 선택</option>'+
+        equipTypes.map(t=>'<option value="'+t.id+'">'+escH(t.name)+'</option>').join('');
+      sel.value='';
+    }
+    const wrap=document.getElementById('rw-eval-items-wrap-'+idx);
+    if(wrap) wrap.style.display='none';
+  }
   const matched=pjtProjects.filter(p=>!q||p.name.toLowerCase().includes(q)).slice(0,15);
   if(!matched.length){drop.style.display='none';return;}
   drop.innerHTML=matched.map(p=>
@@ -1965,6 +1983,20 @@ function selectRwPjt(idx,id,name){
   document.getElementById('rw-pjt-search-'+idx).value=name;
   document.getElementById('rw-pjt-id-'+idx).value=id;
   hidePjtDrop(idx);
+  // 해당 프로젝트에 연동된 설비만 표시
+  const linkedTypeIds=pjtEquips
+    .filter(e=>e.project_id===id && !e.is_excluded)
+    .map(e=>e.equip_type_id)
+    .filter(Boolean);
+  const sel=document.getElementById('rw-equip-type-'+idx);
+  if(!sel) return;
+  const filtered=equipTypes.filter(t=>linkedTypeIds.includes(t.id));
+  sel.innerHTML='<option value="">설비 유형 선택</option>'+
+    filtered.map(t=>'<option value="'+t.id+'">'+escH(t.name)+'</option>').join('');
+  // 평가 항목 초기화
+  const wrap=document.getElementById('rw-eval-items-wrap-'+idx);
+  if(wrap) wrap.style.display='none';
+  sel.value='';
 }
 function hidePjtDrop(idx){
   const d=document.getElementById('rw-pjt-drop-'+idx);
