@@ -413,7 +413,6 @@
         <select id="mb-stat-year" class="fsel" onchange="renderMemberStats()"></select>
         <select id="mb-stat-month" class="fsel" onchange="renderMemberStats()">
           <option value="">전체 월</option>
-          ${Array.from({length:12},(_,i)=>`<option value="${i+1}">${i+1}월</option>`).join('')}
         </select>
       </div>
     </div>
@@ -517,8 +516,16 @@
       <div class="card-body">
         <!-- 보고일 / 작성자 -->
         <div class="frow fc2" style="margin-bottom:12px">
-          <div class="fg" style="margin:0"><label>보고일 *</label><input type="date" id="rw-date" /></div>
+          <div class="fg" style="margin:0"><label>보고일 *</label><input type="date" id="rw-date" onchange="onRwDateChange()" /></div>
           <div class="fg" style="margin:0"><label>작성자</label><input type="text" id="rw-author" readonly style="background:#F8FAFC" /></div>
+        </div>
+        <input type="hidden" id="rw-edit-id" value="" />
+        <div id="rw-edit-banner" style="display:none;background:#FEF3C7;border:1px solid #FCD34D;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400E;margin-bottom:10px">
+          ✏️ <strong>수정 모드</strong> — 기존 보고서를 수정 중입니다.
+          <button onclick="cancelEditReport()" style="margin-left:8px;font-size:11px;color:#92400E;text-decoration:underline;background:none;border:none;cursor:pointer">취소</button>
+        </div>
+        <div id="rw-dup-warn" style="display:none;background:#FEE2E2;border:1px solid #FCA5A5;border-radius:8px;padding:8px 12px;font-size:12px;color:#991B1B;margin-bottom:10px">
+          ⚠️ 해당 날짜에 이미 작성된 보고서가 있습니다. 목록에서 수정하거나 날짜를 변경해주세요.
         </div>
 
         <!-- PJT 업무 항목들 -->
@@ -530,7 +537,7 @@
         </button>
 
         <div style="display:flex;gap:8px;margin-top:4px">
-          <button class="btn btn-primary" onclick="submitReport()" style="flex:1">💾 보고서 저장</button>
+          <button class="btn btn-primary" id="rw-submit-btn" onclick="submitReport()" style="flex:1">💾 보고서 저장</button>
         </div>
         <p id="rw-msg" style="margin-top:6px;font-size:12px"></p>
       </div>
@@ -801,6 +808,7 @@
     <div id="rv-body"></div>
     <div class="mfoot">
       <button class="btn btn-ghost" onclick="closeMo('rv-mo')">닫기</button>
+      <button class="btn btn-outline btn-sm" id="rv-edit-btn" onclick="startEditReport()" style="display:none">✏️ 수정</button>
       <button class="btn btn-danger btn-sm" id="rv-del-btn" onclick="deleteReport()" style="display:none">삭제</button>
     </div>
   </div>
@@ -1151,10 +1159,6 @@ async function loadEquipData(){
   equipTypes=types||[];
   equipItems=items||[];
   evalEquips=equipTypes; // 기존 호환
-}
-async function loadReports(){
-  const {data}=await sb.from('eval_daily_reports').select('*').order('report_date',{ascending:false}).order('created_at',{ascending:false});
-  reports=data||[];
 }
 async function loadEvents(){
   const {data}=await sb.from('eval_events').select('*').order('event_date').order('event_time');
@@ -2061,12 +2065,23 @@ async function submitReport(){
     return (statusPriority[it.status]||0)>(statusPriority[worst]||0)?it.status:worst;
   },'done');
 
-  // 보고 헤더 upsert
-  const {data:rptData,error:rptErr}=await sb.from('eval_reports')
-    .upsert({author_id:me.id,author_name:me.name,user_id:cu.id,
-      report_date:date,status:overallStatus},
-      {onConflict:'author_name,report_date'})
-    .select().single();
+  // 보고 헤더 저장 (수정 모드: update / 신규: insert)
+  const editId=document.getElementById('rw-edit-id').value;
+  let rptData, rptErr;
+  if(editId){
+    // 수정 모드 - 기존 보고서 update
+    ({data:rptData,error:rptErr}=await sb.from('eval_reports')
+      .update({status:overallStatus,report_date:date})
+      .eq('id',editId).select().single());
+  } else {
+    // 신규 - 중복 최종 체크
+    const dup=newReports.find(r=>r.report_date===date&&r.author_id===me.id);
+    if(dup){setMsg('rw-msg','해당 날짜에 이미 보고서가 있습니다. 목록에서 수정해주세요','err');return;}
+    ({data:rptData,error:rptErr}=await sb.from('eval_reports')
+      .insert({author_id:me.id,author_name:me.name,user_id:cu.id,
+        report_date:date,status:overallStatus})
+      .select().single());
+  }
   if(rptErr){setMsg('rw-msg','저장 실패: '+rptErr.message,'err');return;}
 
   // 기존 항목 삭제 후 재삽입
@@ -2094,10 +2109,102 @@ async function submitReport(){
 
 function clearRptForm(){
   document.getElementById('rw-date').value=todayStr();
+  document.getElementById('rw-edit-id').value='';
+  document.getElementById('rw-edit-banner').style.display='none';
+  document.getElementById('rw-dup-warn').style.display='none';
+  document.getElementById('rw-submit-btn').disabled=false;
   document.getElementById('rw-pjt-items').innerHTML='';
   rptItemSeq=0;
   document.getElementById('rw-msg').textContent='';
+  onRwDateChange();
   addRptItem();
+}
+
+// 날짜 변경 시 중복 보고 체크
+function onRwDateChange(){
+  const date=document.getElementById('rw-date').value;
+  const editId=document.getElementById('rw-edit-id').value;
+  if(!date||editId) return; // 수정 모드면 체크 안 함
+  const me=myMember();
+  if(!me) return;
+  const dup=newReports.find(r=>r.report_date===date&&r.author_id===me.id);
+  const warn=document.getElementById('rw-dup-warn');
+  const btn=document.getElementById('rw-submit-btn');
+  if(dup){
+    warn.style.display='block';
+    btn.disabled=true;
+  } else {
+    warn.style.display='none';
+    btn.disabled=false;
+  }
+}
+
+// 수정 모드 시작 - 뷰 모달에서 폼으로 데이터 로드
+async function startEditReport(){
+  const id=document.getElementById('rv-edit-btn').dataset.rid;
+  const r=newReports.find(x=>x.id===id);
+  if(!r) return;
+  closeMo('rv-mo');
+
+  // 탭 전환
+  switchTab('report');
+
+  // 폼 초기화 후 수정 모드 세팅
+  document.getElementById('rw-pjt-items').innerHTML='';
+  rptItemSeq=0;
+  document.getElementById('rw-date').value=r.report_date;
+  document.getElementById('rw-edit-id').value=id;
+  document.getElementById('rw-edit-banner').style.display='block';
+  document.getElementById('rw-dup-warn').style.display='none';
+  document.getElementById('rw-submit-btn').disabled=false;
+  document.getElementById('rw-msg').textContent='';
+
+  // 기존 항목 로드
+  const items=newReportItems.filter(i=>i.report_id===id).sort((a,b)=>a.sort_order-b.sort_order);
+  if(!items.length){ addRptItem(); return; }
+
+  for(const it of items){
+    addRptItem();
+    const idx=rptItemSeq;
+    // pjt type
+    const typeRadio=document.querySelector(`input[name="rw-type-${idx}"][value="${it.pjt_type||'eval'}"]`);
+    if(typeRadio){ typeRadio.checked=true; typeRadio.dispatchEvent(new Event('change')); }
+    await new Promise(r=>setTimeout(r,50));
+    // 프로젝트
+    if(it.project_id){
+      const pjt=pjtProjects.find(p=>p.id===it.project_id);
+      if(pjt) selectRwPjt(idx,pjt.id,pjt.name);
+    }
+    if(it.other_pjt_id){
+      const el=document.getElementById('rw-opjt-'+idx);
+      if(el) el.value=it.other_pjt_id;
+    }
+    // 설비 유형
+    if(it.equip_type_id){
+      const sel=document.getElementById('rw-equip-type-'+idx);
+      if(sel){ sel.value=it.equip_type_id; sel.dispatchEvent(new Event('change')); }
+      await new Promise(r=>setTimeout(r,50));
+    }
+    // 평가 항목 체크
+    if(it.equip_item_ids?.length){
+      it.equip_item_ids.forEach(iid=>{
+        const cb=document.querySelector(`input[name="eval_item_${idx}"][value="${iid}"]`);
+        if(cb) cb.checked=true;
+      });
+    }
+    // 업무 내용 / 이슈
+    const wc=document.getElementById('rw-work-'+idx);
+    if(wc) wc.value=it.work_content||'';
+    const iss=document.getElementById('rw-issue-'+idx);
+    if(iss) iss.value=it.issue_note||'';
+    const st=document.getElementById('rw-status-'+idx);
+    if(st) st.value=it.status||'progress';
+  }
+}
+
+// 수정 취소
+function cancelEditReport(){
+  clearRptForm();
 }
 
 function renderReportList(){
@@ -2175,6 +2282,8 @@ function viewNewReport(id){
 
   document.getElementById('rv-body').innerHTML=body||'<div class="loading">내용 없음</div>';
   const isOwner=cu&&(r.user_id===cu.id||myMember()?.id===r.author_id);
+  document.getElementById('rv-edit-btn').style.display=isOwner?'':'none';
+  document.getElementById('rv-edit-btn').dataset.rid=id;
   document.getElementById('rv-del-btn').style.display=isOwner?'':'none';
   document.getElementById('rv-del-btn').dataset.rid=id;
   document.getElementById('rv-del-btn').dataset.rtype='new';
@@ -2775,18 +2884,29 @@ async function deleteException(){
 // ═══════════════════════════════════════
 function initMemberStatSelects(){
   const yearSel=document.getElementById('mb-stat-year');
-  if(!yearSel||yearSel.options.length>1) return;
+  const monthSel=document.getElementById('mb-stat-month');
+  if(!yearSel||!monthSel) return;
   const now=new Date();
   const curY=now.getFullYear();
+  const curM=now.getMonth()+1;
+  // 연도 옵션 (매번 재생성)
   yearSel.innerHTML='';
   for(let y=curY;y>=curY-2;y--){
     const opt=document.createElement('option');
     opt.value=y; opt.textContent=y+'년';
-    if(y===curY) opt.selected=true;
     yearSel.appendChild(opt);
   }
-  // 현재 월 기본 선택
-  document.getElementById('mb-stat-month').value=now.getMonth()+1;
+  yearSel.value=curY;
+  // 월 옵션 (최초 1회)
+  if(monthSel.options.length<2){
+    monthSel.innerHTML='<option value="">전체 월</option>';
+    for(let m=1;m<=12;m++){
+      const opt=document.createElement('option');
+      opt.value=m; opt.textContent=m+'월';
+      monthSel.appendChild(opt);
+    }
+  }
+  if(!monthSel.value) monthSel.value=curM;
 }
 
 function getWorkingDates(year, month){
