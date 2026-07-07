@@ -409,13 +409,19 @@
   <div class="card">
     <div class="card-hd">
       <span class="card-title">📊 보고 누적 현황</span>
-      <div style="display:flex;align-items:center;gap:8px">
-        <select id="mb-stat-year" class="fsel" onchange="renderMemberStats()"></select>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <select id="mb-stat-year" class="fsel" onchange="renderMemberStats()">
+          <option value="2026">2026년</option>
+          <option value="2025">2025년</option>
+          <option value="2024">2024년</option>
+        </select>
         <select id="mb-stat-month" class="fsel" onchange="renderMemberStats()">
           <option value="">전체 월</option>
         </select>
+        <button class="btn btn-outline btn-sm" onclick="confirmResetStat()" title="선택한 연도의 누적 시작일을 오늘로 설정합니다">🔄 리셋</button>
       </div>
     </div>
+    <div id="mb-stat-reset-info" style="display:none;padding:6px 14px 0;font-size:11px;color:var(--muted)"></div>
     <div style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;font-size:12px" id="mb-stat-table">
         <thead>
@@ -2882,6 +2888,30 @@ async function deleteException(){
 // ═══════════════════════════════════════
 //  인원별 보고 누적 현황
 // ═══════════════════════════════════════
+
+// 리셋 기준일: localStorage에 stat_reset_YYYY 키로 저장
+function getStatResetDate(year){
+  return localStorage.getItem('stat_reset_'+year)||null;
+}
+function setStatResetDate(year, dateStr){
+  localStorage.setItem('stat_reset_'+year, dateStr);
+}
+
+function confirmResetStat(){
+  const year=parseInt(document.getElementById('mb-stat-year')?.value)||new Date().getFullYear();
+  const today=todayStr();
+  const existing=getStatResetDate(year);
+  const msg=existing
+    ?`${year}년 누적 현황 시작일을 오늘(${today})로 변경합니다.
+(기존: ${existing})
+기존 데이터는 삭제되지 않습니다.`
+    :`${year}년 누적 현황 시작일을 오늘(${today})로 설정합니다.
+기존 데이터는 삭제되지 않습니다.`;
+  if(!confirm(msg)) return;
+  setStatResetDate(year, today);
+  renderMemberStats();
+}
+
 function initMemberStatSelects(){
   const yearSel=document.getElementById('mb-stat-year');
   const monthSel=document.getElementById('mb-stat-month');
@@ -2889,15 +2919,9 @@ function initMemberStatSelects(){
   const now=new Date();
   const curY=now.getFullYear();
   const curM=now.getMonth()+1;
-  // 연도 옵션 (매번 재생성)
-  yearSel.innerHTML='';
-  for(let y=curY;y>=curY-2;y--){
-    const opt=document.createElement('option');
-    opt.value=y; opt.textContent=y+'년';
-    yearSel.appendChild(opt);
-  }
-  yearSel.value=curY;
-  // 월 옵션 (최초 1회)
+  // 연도: HTML에 정적으로 삽입되어 있으므로 기본값만 세팅
+  if(!yearSel.value) yearSel.value=curY;
+  // 월 옵션 — 비어있을 때만 생성
   if(monthSel.options.length<2){
     monthSel.innerHTML='<option value="">전체 월</option>';
     for(let m=1;m<=12;m++){
@@ -2905,12 +2929,11 @@ function initMemberStatSelects(){
       opt.value=m; opt.textContent=m+'월';
       monthSel.appendChild(opt);
     }
+    monthSel.value=curM;
   }
-  if(!monthSel.value) monthSel.value=curM;
 }
 
 function getWorkingDates(year, month){
-  // 해당 월의 평일(월~금) 날짜 목록
   const dates=[];
   const m=month?parseInt(month)-1:null;
   const start=m!=null?new Date(year,m,1):new Date(year,0,1);
@@ -2923,7 +2946,6 @@ function getWorkingDates(year, month){
 }
 
 function getWeekStartDates(year, month){
-  // 해당 월에 속한 주의 월요일 날짜 목록
   const starts=new Set();
   const m=month?parseInt(month)-1:null;
   const start=m!=null?new Date(year,m,1):new Date(year,0,1);
@@ -2938,14 +2960,36 @@ function getWeekStartDates(year, month){
 }
 
 function renderMemberStats(){
-  initMemberStatSelects();
   const year=parseInt(document.getElementById('mb-stat-year')?.value)||new Date().getFullYear();
   const month=document.getElementById('mb-stat-month')?.value||'';
-
-  const workDates=getWorkingDates(year, month);
-  const weekStarts=getWeekStartDates(year, month);
   const today=todayStr();
-  // 오늘 이후 미래 날짜는 제외
+
+  // 리셋 기준일 적용
+  const resetDate=getStatResetDate(year);
+  // 월 필터가 있을 때는 리셋 기준일과 무관 (월별 조회는 그 달 전체)
+  const effectiveStart=(!month&&resetDate)?resetDate:null;
+
+  // 리셋 기준일 안내
+  const infoEl=document.getElementById('mb-stat-reset-info');
+  if(infoEl){
+    if(resetDate&&!month){
+      infoEl.style.display='block';
+      infoEl.innerHTML=`📅 ${year}년 누적 집계 시작일: <strong>${resetDate}</strong> <button onclick="clearResetStat(${year})" style="margin-left:6px;font-size:11px;color:#EF4444;text-decoration:underline;background:none;border:none;cursor:pointer">초기화</button>`;
+    } else {
+      infoEl.style.display='none';
+    }
+  }
+
+  let workDates=getWorkingDates(year, month);
+  let weekStarts=getWeekStartDates(year, month);
+
+  // 리셋 기준일 이후만 (연도 전체 조회 시)
+  if(effectiveStart){
+    workDates=workDates.filter(d=>d>=effectiveStart);
+    weekStarts=weekStarts.filter(d=>d>=effectiveStart);
+  }
+
+  // 미래 날짜 제외
   const pastWorkDates=workDates.filter(d=>d<=today);
   const pastWeekStarts=weekStarts.filter(d=>d<=today);
 
@@ -2953,14 +2997,24 @@ function renderMemberStats(){
   if(!tbody) return;
 
   tbody.innerHTML=members.map(m=>{
-    // 일일보고 제출 수
+    // 일일보고 제출
     const dailySubmit=newReports.filter(r=>r.author_id===m.id&&pastWorkDates.includes(r.report_date)).length;
-    // 예외처리 수
-    const excCount=reportExceptions.filter(e=>e.member_id===m.id&&pastWorkDates.includes(e.exception_date)).length;
-    // 누락 = 영업일 - 제출 - 예외
+
+    // 예외처리: 사유별 건수
+    const myExcs=reportExceptions.filter(e=>e.member_id===m.id&&pastWorkDates.includes(e.exception_date));
+    const excCount=myExcs.length;
+    // 사유별 집계
+    const excByReason={};
+    myExcs.forEach(e=>{
+      const r=e.reason||'기타';
+      excByReason[r]=(excByReason[r]||0)+1;
+    });
+    const excDetail=Object.entries(excByReason).map(([r,n])=>`${r} ${n}건`).join(' · ');
+
+    // 누락
     const dailyMiss=Math.max(0,pastWorkDates.length-dailySubmit-excCount);
 
-    // 주간보고 제출 수
+    // 주간보고
     const weeklySubmit=weeklyReports.filter(w=>w.author_id===m.id&&pastWeekStarts.includes(w.week_start)).length;
     const weeklyMiss=Math.max(0,pastWeekStarts.length-weeklySubmit);
 
@@ -2981,7 +3035,10 @@ function renderMemberStats(){
       </td>
       <td style="padding:9px 12px;text-align:center">
         ${excCount>0
-          ?`<span style="font-weight:700;color:#D97706;background:#FEF3C7;padding:2px 8px;border-radius:5px">${excCount}건</span>`
+          ?`<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+              <span style="font-weight:700;color:#D97706;background:#FEF3C7;padding:2px 8px;border-radius:5px">${excCount}건</span>
+              ${excDetail?`<span style="font-size:10px;color:#92400E">${escH(excDetail)}</span>`:''}
+            </div>`
           :`<span style="color:#CBD5E1">–</span>`}
       </td>
       <td style="padding:9px 12px;text-align:center">
@@ -2996,6 +3053,12 @@ function renderMemberStats(){
       </td>
     </tr>`;
   }).join('')||`<tr><td colspan="7" class="loading">인원이 없습니다</td></tr>`;
+}
+
+function clearResetStat(year){
+  if(!confirm(year+'년 누적 시작일 설정을 초기화하여 연도 전체를 집계하겠습니까?')) return;
+  localStorage.removeItem('stat_reset_'+year);
+  renderMemberStats();
 }
 
 // ═══════════════════════════════════════
