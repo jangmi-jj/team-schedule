@@ -75,6 +75,14 @@
     .project-bar { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
     .project-bar label { font-size: 13px; font-weight: 600; white-space: nowrap; }
     .project-bar select { max-width: 300px; }
+    #mg-search-wrap { position: relative; width: 280px; }
+    #mg-search { width: 100%; padding-right: 28px; }
+    #mg-search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--muted); font-size: 14px; display: none; user-select: none; }
+    #mg-search-drop { display: none; position: absolute; top: 100%; left: 0; right: 0; margin-top: 4px; background: #fff; border: 1.5px solid var(--primary, #2563EB); border-radius: 8px; z-index: 200; max-height: 220px; overflow-y: auto; box-shadow: 0 4px 12px rgba(0,0,0,.12); }
+    #mg-search-drop .mg-search-item { padding: 9px 12px; font-size: 13px; cursor: pointer; border-bottom: 1px solid #F1F5F9; }
+    #mg-search-drop .mg-search-item:last-child { border-bottom: none; }
+    #mg-search-drop .mg-search-item:hover { background: #F1F5F9; }
+    #mg-search-drop .mg-search-empty { padding: 10px 12px; font-size: 12px; color: var(--muted); }
     .total-progress-bar { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 20px; margin-bottom: 16px; display: flex; align-items: center; gap: 16px; }
     .total-pct-num { font-size: 26px; font-weight: 700; color: var(--primary); min-width: 60px; }
     .total-bar-bg { flex: 1; height: 8px; background: var(--border); border-radius: 5px; overflow: hidden; }
@@ -236,7 +244,14 @@
 <div id="tab-manage" class="tab-content" style="display:none">
   <div class="project-bar">
     <label>프로젝트</label>
-    <select id="mg-sel" onchange="onMgChange()"><option value="">프로젝트를 선택해주세요</option></select>
+    <select id="mg-sel" onchange="onMgChange()" style="display:none"><option value="">프로젝트를 선택해주세요</option></select>
+    <div id="mg-search-wrap">
+      <input type="text" id="mg-search" placeholder="프로젝트명 검색..." autocomplete="off"
+        oninput="onMgSearch()" onfocus="onMgSearch()"
+        onblur="setTimeout(hideMgDrop,200)" />
+      <span id="mg-search-clear" onclick="clearMgSearch()">✕</span>
+      <div id="mg-search-drop"></div>
+    </div>
     <button class="btn btn-primary btn-sm" onclick="showNewProjectModal()" style="white-space:nowrap">+ 신규 프로젝트</button>
     <button class="edit-btn" id="mg-proj-edit-btn" onclick="showEditProjectModal()" style="display:none;white-space:nowrap">✏️ 프로젝트 편집</button>
     <div id="mg-hidden-wrap" style="display:none;margin-left:auto;align-items:center;gap:8px">
@@ -611,6 +626,7 @@ async function loadProjects() {
       projects.map(p => '<option value="' + p.id + '">' + escHtml(p.name) + '</option>').join('');
     if (prev) sel.value = prev;
   }
+  syncMgSearchDisplay();
 }
 
 async function loadAllPhaseData() {
@@ -713,6 +729,7 @@ async function saveEditProject() {
   // 셀렉트박스 업데이트
   const opt = document.querySelector('#mg-sel option[value="' + mgId + '"]');
   if (opt) opt.textContent = name;
+  syncMgSearchDisplay();
   buildFilterOptions();
   renderOverview();
 }
@@ -1148,9 +1165,52 @@ function goManage(pid) { switchTab('manage'); document.getElementById('mg-sel').
 // ──────────────────────────────────────────
 // PJT 관리 탭
 // ──────────────────────────────────────────
+// 프로젝트 검색 드롭다운
+function onMgSearch() {
+  const q = (document.getElementById('mg-search')?.value || '').trim().toLowerCase();
+  const drop = document.getElementById('mg-search-drop');
+  const clearBtn = document.getElementById('mg-search-clear');
+  if (clearBtn) clearBtn.style.display = q ? 'block' : 'none';
+  const matched = projects.filter(p => !q || (p.name || '').toLowerCase().includes(q)).slice(0, 20);
+  if (!matched.length) {
+    drop.innerHTML = '<div class="mg-search-empty">일치하는 프로젝트가 없습니다</div>';
+    drop.style.display = 'block';
+    return;
+  }
+  drop.innerHTML = matched.map(p =>
+    '<div class="mg-search-item" onclick="selectMgProject(\'' + escJs(p.id) + '\')">' + escHtml(p.name) + '</div>'
+  ).join('');
+  drop.style.display = 'block';
+}
+function hideMgDrop() {
+  const drop = document.getElementById('mg-search-drop');
+  if (drop) drop.style.display = 'none';
+}
+function selectMgProject(id) {
+  document.getElementById('mg-sel').value = id;
+  hideMgDrop();
+  onMgChange();
+}
+function clearMgSearch() {
+  document.getElementById('mg-search').value = '';
+  document.getElementById('mg-search-clear').style.display = 'none';
+  document.getElementById('mg-sel').value = '';
+  hideMgDrop();
+  onMgChange();
+}
+function syncMgSearchDisplay() {
+  const input = document.getElementById('mg-search');
+  if (!input) return;
+  const proj = projects.find(p => p.id === mgId);
+  input.value = proj ? proj.name : '';
+  const clearBtn = document.getElementById('mg-search-clear');
+  if (clearBtn) clearBtn.style.display = proj ? 'block' : 'none';
+}
+
 function onMgChange() {
   mgId = document.getElementById('mg-sel').value || null;
   editAsg = false;
+  syncMgSearchDisplay();
   const hw = document.getElementById('mg-hidden-wrap');
   if (!mgId) {
     document.getElementById('mg-total-bar').style.display = 'none';
