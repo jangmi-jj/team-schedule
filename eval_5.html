@@ -1452,7 +1452,7 @@ function renderWeekSummary(){
     // 구분별 임시 정리
     const allItems=weekRpts.flatMap(r=>{
       const its=newReportItems.filter(i=>i.report_id===r.id);
-      return its.map(it=>({...it,_author:members.find(m=>m.id===r.author_id)?.name||r.author_name||'–'}));
+      return its.map(it=>({...it,_author:members.find(m=>m.id===r.author_id)?.name||r.author_name||'–',_date:r.report_date}));
     });
     const sections=[
       {key:'eval',label:'📋 평가 PJT',color:'#7C3AED'},
@@ -1463,16 +1463,28 @@ function renderWeekSummary(){
     sections.forEach(sec=>{
       const items=allItems.filter(i=>i.pjt_type===sec.key);
       if(!items.length) return;
+      // 동일 인원 + 동일 프로젝트/설비 항목을 하나로 묶기
+      const groups={}, order=[];
+      items.forEach(it=>{
+        const pname=it.project_id?pjtProjects.find(p=>p.id===it.project_id)?.name:'';
+        const ename=it.equip_type_id?equipTypes.find(t=>t.id===it.equip_type_id)?.name:'';
+        const tag=[pname,ename].filter(Boolean).join(' / ');
+        const gkey=it._author+'||'+tag;
+        if(!groups[gkey]){ groups[gkey]={author:it._author,tag,entries:[]}; order.push(gkey); }
+        groups[gkey].entries.push({date:it._date,content:it.work_content||''});
+      });
       html+=`<div style="margin-bottom:10px">
         <div style="font-size:11px;font-weight:700;color:${sec.color};margin-bottom:5px">${sec.label}</div>
-        ${items.map(it=>{
-          const pname=it.project_id?pjtProjects.find(p=>p.id===it.project_id)?.name:'';
-          const ename=it.equip_type_id?equipTypes.find(t=>t.id===it.equip_type_id)?.name:'';
-          const tag=[pname,ename].filter(Boolean).join(' / ');
+        ${order.map(gkey=>{
+          const g=groups[gkey];
+          const multi=g.entries.length>1;
+          const entriesHtml=g.entries.map(e=>
+            `<div style="font-size:12px;margin-top:2px">${multi&&e.date?`<span style="font-size:10px;color:var(--muted);margin-right:4px">${escH(fmtDateShort(e.date))}</span>`:''}${escH(e.content)}</div>`
+          ).join('');
           return `<div style="font-size:12px;padding:5px 8px;border-left:3px solid ${sec.color};margin-bottom:3px;background:#FAFBFF">
-            <span style="font-weight:700;color:var(--muted);font-size:11px">${escH(it._author)}</span>
-            ${tag?`<span style="font-size:10px;color:${sec.color};margin:0 4px">· ${escH(tag)}</span>`:''}
-            <span>${escH(it.work_content||'')}</span>
+            <span style="font-weight:700;color:var(--muted);font-size:11px">${escH(g.author)}</span>
+            ${g.tag?`<span style="font-size:10px;color:${sec.color};margin:0 4px">· ${escH(g.tag)}</span>`:''}
+            ${entriesHtml}
           </div>`;
         }).join('')}
       </div>`;
