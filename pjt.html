@@ -1492,7 +1492,7 @@ function renderSchedTable() {
         '<td style="text-align:center">' + mkDateInp('ph',p.phase,'','plan',curPlan||'') + '</td>' +
         '<td style="text-align:center">' + mkDateInp('ph',p.phase,'','end', curEnd||'')  + '</td>' +
         '<td style="text-align:center">' + daysHtml + '</td>' +
-        '<td>' + phaseRemark(p, today) + '</td>' +
+        '<td>' + (p.phase === 0 ? specLinkCell(mgId) : phaseRemark(p, today)) + '</td>' +
       '</tr>';
 
       // 직전 날짜 업데이트
@@ -1640,6 +1640,41 @@ function phaseRemark(p, today) {
   }
   const pd = allPD[mgId]?.[p.phase]||{};
   return remark(pd.plan_date, pd.end_date, pd.done||false, today);
+}
+
+// 제품사양서(0단계) 비고 칸: 링크 입력/열기
+let editSpecUrl = false;
+function specLinkCell(pid) {
+  const pd = allPD[pid]?.[0] || {};
+  const url = pd.spec_url || '';
+  if (editSpecUrl && cu) {
+    return '<div style="display:flex;gap:4px;align-items:center">' +
+      '<input type="text" id="spec-url-inp" value="' + escHtml(url) + '" placeholder="https://..." style="font-size:12px;padding:4px 6px;width:150px" onkeydown="if(event.key===\'Enter\')saveSpecLink()" />' +
+      '<button class="save-btn" style="padding:2px 8px;font-size:11px" onclick="saveSpecLink()">저장</button>' +
+      '<button class="cancel-btn" style="padding:2px 8px;font-size:11px" onclick="cancelSpecLink()">취소</button>' +
+    '</div>';
+  }
+  const linkHtml = url
+    ? '<a href="' + escHtml(url) + '" target="_blank" rel="noopener noreferrer" style="font-size:12px;color:var(--primary);font-weight:600;margin-right:6px">🔗 링크 열기</a>'
+    : '<span style="font-size:11px;color:var(--muted);margin-right:6px">–</span>';
+  if (!cu) return linkHtml;
+  return linkHtml + '<button class="edit-btn" style="font-size:11px;padding:2px 8px" onclick="startEditSpecLink()">' + (url ? '✏️' : '+ 링크') + '</button>';
+}
+function startEditSpecLink() { editSpecUrl = true; renderSchedTable(); }
+function cancelSpecLink()    { editSpecUrl = false; renderSchedTable(); }
+async function saveSpecLink() {
+  if (!cu || !mgId) return;
+  const val = document.getElementById('spec-url-inp').value.trim();
+  const pd = allPD[mgId]?.[0] || {};
+  const row = { project_id: mgId, phase: 0, updated_at: new Date().toISOString(),
+    plan_date: pd.plan_date||null, end_date: pd.end_date||null, done: pd.done||false,
+    spec_url: val || null };
+  ASGN.forEach(f => { row[f.key] = pd[f.key]||null; });
+  if (pd.id) { await sb.from('pjt_phases').update(row).eq('id', pd.id); }
+  else { const { data } = await sb.from('pjt_phases').insert(row).select().single(); if (data) { allPD[mgId]=allPD[mgId]||{}; allPD[mgId][0]=data; } }
+  await loadAllPhaseData();
+  editSpecUrl = false;
+  renderSchedTable();
 }
 
 async function saveDate(t, ph, sub, fld, val) {
