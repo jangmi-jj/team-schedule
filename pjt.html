@@ -177,6 +177,23 @@
   <button class="btn btn-primary" onclick="showLoginModal()">로그인</button>
 </div>
 
+<!-- 비밀번호 재설정 화면 (이메일 링크로 진입 시) -->
+<div id="pwreset-gate" style="display:none;padding:80px 20px;text-align:center">
+  <div style="font-size:17px;font-weight:700;margin-bottom:16px">🔑 새 비밀번호 설정</div>
+  <div style="max-width:320px;margin:0 auto;text-align:left">
+    <div class="form-group">
+      <label>새 비밀번호</label>
+      <input type="password" id="pwreset-new" placeholder="6자 이상" style="width:100%;box-sizing:border-box" />
+    </div>
+    <div class="form-group">
+      <label>새 비밀번호 확인</label>
+      <input type="password" id="pwreset-confirm" style="width:100%;box-sizing:border-box" onkeydown="if(event.key==='Enter')submitPwReset()" />
+    </div>
+    <p id="pwreset-err" style="color:#EF4444;font-size:12px;margin-bottom:10px"></p>
+    <button class="btn btn-primary" style="width:100%" onclick="submitPwReset()">비밀번호 변경</button>
+  </div>
+</div>
+
 <div id="app-content" style="display:none">
 <div class="tab-nav">
   <button class="active" onclick="switchTab('overview')">📊 PJT 현황</button>
@@ -586,7 +603,15 @@ let expandedOv=new Set();
 
   try {
     sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let inRecovery = false;
+    sb.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        inRecovery = true;
+        showPwResetGate();
+      }
+    });
     const { data:{ session } } = await sb.auth.getSession();
+    if (inRecovery) return; // 비밀번호 재설정 화면 표시 중 - 일반 로그인 흐름 건너뜀
     if (session?.user) {
       cu = session.user; updateAuthUI();
       openAppContent();
@@ -604,11 +629,38 @@ let expandedOv=new Set();
 
 function showAuthGate() {
   document.getElementById('auth-gate').style.display = 'block';
+  document.getElementById('pwreset-gate').style.display = 'none';
   document.getElementById('app-content').style.display = 'none';
 }
 function openAppContent() {
   document.getElementById('auth-gate').style.display = 'none';
+  document.getElementById('pwreset-gate').style.display = 'none';
   document.getElementById('app-content').style.display = 'block';
+}
+function showPwResetGate() {
+  document.getElementById('auth-gate').style.display = 'none';
+  document.getElementById('app-content').style.display = 'none';
+  document.getElementById('pwreset-gate').style.display = 'block';
+}
+async function submitPwReset() {
+  const pw = document.getElementById('pwreset-new').value;
+  const pw2 = document.getElementById('pwreset-confirm').value;
+  const errEl = document.getElementById('pwreset-err');
+  errEl.textContent = '';
+  if (!pw || pw.length < 6) { errEl.textContent = '비밀번호는 6자 이상이어야 합니다.'; return; }
+  if (pw !== pw2) { errEl.textContent = '비밀번호가 일치하지 않습니다.'; return; }
+  const { error } = await sb.auth.updateUser({ password: pw });
+  if (error) { errEl.textContent = '변경 실패: ' + error.message; return; }
+  document.getElementById('pwreset-gate').innerHTML =
+    '<div style="font-size:17px;font-weight:700;margin-bottom:10px">✅ 비밀번호가 변경되었습니다</div>' +
+    '<div style="font-size:13px;color:var(--muted);margin-bottom:18px">새 비밀번호로 다시 로그인해주세요.</div>' +
+    '<button class="btn btn-primary" onclick="afterPwReset()">확인</button>';
+}
+async function afterPwReset() {
+  await sb.auth.signOut();
+  cu = null; updateAuthUI();
+  showAuthGate();
+  showLoginModal();
 }
 
 async function loadAll() {
