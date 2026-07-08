@@ -170,6 +170,14 @@
   </div>
 </div>
 
+<!-- 비로그인 접근 차단 화면 -->
+<div id="auth-gate" style="padding:80px 20px;text-align:center">
+  <div style="font-size:17px;font-weight:700;margin-bottom:10px">🔐 로그인이 필요합니다</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:18px">이 페이지의 내용을 확인하려면 로그인해주세요.</div>
+  <button class="btn btn-primary" onclick="showLoginModal()">로그인</button>
+</div>
+
+<div id="app-content" style="display:none">
 <div class="tab-nav">
   <button class="active" onclick="switchTab('overview')">📊 PJT 현황</button>
   <button onclick="switchTab('manage')">📁 PJT 관리</button>
@@ -422,6 +430,7 @@ SKH 청주 M15X Ph-3 SKHCFA-100(1)_S25-15-32	1	1		안국현	김용일	김형태	
   </div>
 
 </div>
+</div><!-- /app-content -->
 
 <!-- 인원 추가/편집 모달 -->
 <div id="mb-modal" class="modal-overlay" style="display:none">
@@ -578,14 +587,29 @@ let expandedOv=new Set();
   try {
     sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     const { data:{ session } } = await sb.auth.getSession();
-    if (session?.user) { cu = session.user; updateAuthUI(); }
-    await loadAll();
+    if (session?.user) {
+      cu = session.user; updateAuthUI();
+      openAppContent();
+      await loadAll();
+    } else {
+      updateAuthUI();
+      showAuthGate();
+    }
   } catch(e) {
     console.error('init error:', e);
     document.getElementById('ov-tbody').innerHTML =
       '<tr><td colspan="20" style="padding:20px;text-align:center;color:red">초기화 오류: ' + e.message + '</td></tr>';
   }
 })();
+
+function showAuthGate() {
+  document.getElementById('auth-gate').style.display = 'block';
+  document.getElementById('app-content').style.display = 'none';
+}
+function openAppContent() {
+  document.getElementById('auth-gate').style.display = 'none';
+  document.getElementById('app-content').style.display = 'block';
+}
 
 async function loadAll() {
   document.getElementById('ov-tbody').innerHTML =
@@ -692,12 +716,12 @@ async function doLogin() {
   if (error) { document.getElementById('li-err').textContent = error.message; return; }
   cu = data.user; updateAuthUI();
   document.getElementById('li-modal').style.display = 'none';
-  renderOverview();
-  if (mgId) renderManage();
+  openAppContent();
+  await loadAll();
 }
 async function doLogout() {
   await sb.auth.signOut(); cu = null; updateAuthUI();
-  renderOverview(); if (mgId) renderManage();
+  showAuthGate();
 }
 function updateAuthUI() {
   document.getElementById('auth-area').innerHTML = cu
