@@ -279,6 +279,14 @@
   </div>
 </div>
 
+<!-- 비로그인 접근 차단 화면 -->
+<div id="auth-gate" style="padding:80px 20px;text-align:center">
+  <div style="font-size:17px;font-weight:700;margin-bottom:10px">🔐 로그인이 필요합니다</div>
+  <div style="font-size:13px;color:var(--muted);margin-bottom:18px">이 페이지의 내용을 확인하려면 로그인해주세요.</div>
+  <button class="btn btn-primary" onclick="showLogin()">로그인</button>
+</div>
+
+<div id="app-content" style="display:none">
 <!-- ── 상단 탭 (데스크탑) ── -->
 <div class="tab-nav">
   <button class="active" onclick="switchTab('dashboard')">📊 대시보드</button>
@@ -668,6 +676,7 @@
     </div>
   </div>
 </div>
+</div><!-- /app-content -->
 
 <!-- ══════════════════════════════
   모달: 로그인
@@ -1108,9 +1117,24 @@ let selPjtId=null; // 프로젝트관리 탭 선택된 PJT
   dashDate=todayStr();
   sb=window.supabase.createClient(SB_URL,SB_KEY);
   const {data:{session}}=await sb.auth.getSession();
-  if(session?.user){cu=session.user;updateAuthUI();}
-  await loadAll();
+  if(session?.user){
+    cu=session.user;updateAuthUI();
+    openAppContent();
+    await loadAll();
+  } else {
+    updateAuthUI();
+    showAuthGate();
+  }
 })();
+
+function showAuthGate(){
+  document.getElementById('auth-gate').style.display='block';
+  document.getElementById('app-content').style.display='none';
+}
+function openAppContent(){
+  document.getElementById('auth-gate').style.display='none';
+  document.getElementById('app-content').style.display='block';
+}
 
 async function loadAll(){
   await Promise.all([loadMembers(),loadPjtProjects(),loadOtherPjts(),loadEquipData(),loadReports(),loadEvents(),loadTodos(),loadTrips(),loadWeeklyReports(),loadPjtEquips(),loadEvalHistory(),loadReportExceptions()]);
@@ -1247,9 +1271,10 @@ async function doLogin(){
   });
   if(error){document.getElementById('li-err').textContent=error.message;return;}
   cu=data.user; updateAuthUI(); closeMo('li-mo');
+  openAppContent();
   await loadAll();
 }
-async function doLogout(){await sb.auth.signOut();cu=null;updateAuthUI();renderAll();}
+async function doLogout(){await sb.auth.signOut();cu=null;updateAuthUI();showAuthGate();}
 function updateAuthUI(){
   const me=myMember();
   document.getElementById('auth-area').innerHTML=cu
