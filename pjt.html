@@ -1662,9 +1662,17 @@ function specLinkCell(pid) {
 }
 function startEditSpecLink() { editSpecUrl = true; renderSchedTable(); }
 function cancelSpecLink()    { editSpecUrl = false; renderSchedTable(); }
+function extractUrl(raw) {
+  const s = (raw || '').trim();
+  if (!s) return '';
+  const m = s.match(/https?:\/\/[^\s"'<>]+/);
+  if (m) return m[0];
+  // http(s):// 없이 주소만 입력된 경우 자동 보정
+  return /^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(s) ? 'http://' + s : s;
+}
 async function saveSpecLink() {
   if (!cu || !mgId) return;
-  const val = document.getElementById('spec-url-inp').value.trim();
+  const val = extractUrl(document.getElementById('spec-url-inp').value);
   const pd = allPD[mgId]?.[0] || {};
   const row = { project_id: mgId, phase: 0, updated_at: new Date().toISOString(),
     plan_date: pd.plan_date||null, end_date: pd.end_date||null, done: pd.done||false,
