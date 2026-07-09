@@ -2138,7 +2138,7 @@ async function submitReport(){
   const me2=myMember();
   for(const it of (insertedItems||[])){
     if(it.pjt_type==='eval'&&it.project_id&&it.equip_type_id&&it.equip_item_ids?.length){
-      await autoCreateHistory(it.id, it.project_id, it.equip_type_id, it.equip_item_ids, date, me2?.name||'');
+      await autoCreateHistory(it.id, it.project_id, it.equip_type_id, it.equip_item_ids, date, me2?.name||'', it.work_content, it.issue_note);
     }
   }
   await loadEvalHistory();
@@ -2655,7 +2655,7 @@ function renderPjtDetail(pjtId){
                         <span onclick="showHistModal('${escJs(h.id)}')"
                           style="font-size:11px;background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;gap:3px"
                           title="${escH(h.author_name||'')}${h.note?' · '+escH(h.note):''}">
-                          ✓ ${fmtDate(h.eval_date)}
+                          ✓ ${fmtDate(h.eval_date)}${h.note?' <span style="opacity:.7">📝</span>':''}
                         </span>`).join('')}
                       ${itemHist.length>3?`<span style="font-size:11px;color:var(--muted)">+${itemHist.length-3}건</span>`:''}
                     </div>`
@@ -2831,15 +2831,28 @@ async function deleteHistory(){
 }
 
 // ── 업무보고 저장 시 히스토리 자동 생성 ──
-async function autoCreateHistory(reportItemId, pjtId, equipTypeId, evalItemIds, evalDate, authorName){
+async function autoCreateHistory(reportItemId, pjtId, equipTypeId, evalItemIds, evalDate, authorName, workContent, issueNote){
   if(!pjtId||!equipTypeId||!evalItemIds?.length) return;
   // 프로젝트-설비 매칭 찾기
   const pe=pjtEquips.find(x=>x.project_id===pjtId&&x.equip_type_id===equipTypeId&&!x.is_excluded);
   if(!pe) return;
-  // 각 평가항목별로 히스토리 생성 (중복 방지: 같은 날짜+항목 있으면 skip)
+  // 업무보고 내용을 히스토리 비고(note)에 연동 (수행 업무 + 이슈)
+  const autoNote=[workContent?.trim(), issueNote?.trim()?('[이슈] '+issueNote.trim()):null]
+    .filter(Boolean).join('\n\n')||null;
+  // 각 평가항목별로 히스토리 생성/갱신 (같은 날짜+항목 있으면 내용만 최신화)
   for(const itemId of evalItemIds){
     const exists=evalHistory.find(h=>h.pjt_equip_id===pe.id&&h.equip_item_id===itemId&&h.eval_date===evalDate);
-    if(exists) continue;
+    if(exists){
+      // 이미 기록이 있으면 업무보고 내용으로 비고를 최신화 (수기로 남긴 비고는 덮어쓰지 않도록 report_item_id로 생성된 건만 갱신)
+      if(exists.report_item_id){
+        await sb.from('eval_history').update({
+          note:autoNote,
+          author_name:authorName,
+          report_item_id:reportItemId
+        }).eq('id',exists.id);
+      }
+      continue;
+    }
     await sb.from('eval_history').insert({
       pjt_equip_id:pe.id,
       project_id:pjtId,
@@ -2847,7 +2860,8 @@ async function autoCreateHistory(reportItemId, pjtId, equipTypeId, evalItemIds, 
       equip_item_id:itemId,
       eval_date:evalDate,
       report_item_id:reportItemId,
-      author_name:authorName
+      author_name:authorName,
+      note:autoNote
     });
   }
 }
