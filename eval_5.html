@@ -2634,36 +2634,44 @@ function renderPjtDetail(pjtId){
       ${excluded?'':`
       <!-- 평가항목별 히스토리 -->
       <div style="padding:12px 14px">
-        <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed">
           <thead>
             <tr style="background:#F8FAFC">
-              <th style="padding:7px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);border-bottom:2px solid var(--border);min-width:140px">평가 항목</th>
-              <th style="padding:7px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);border-bottom:2px solid var(--border)">평가 이력</th>
-              <th style="padding:7px 10px;width:60px;border-bottom:2px solid var(--border)"></th>
+              <th style="padding:7px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);border-bottom:2px solid var(--border);width:18%">평가 항목</th>
+              <th style="padding:7px 10px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);border-bottom:2px solid var(--border);width:auto">평가 이력</th>
+              <th style="padding:7px 10px;width:74px;border-bottom:2px solid var(--border)"></th>
             </tr>
           </thead>
           <tbody>
             ${items.map(item=>{
-              const itemHist=hist.filter(h=>h.equip_item_id===item.id).sort((a,b)=>b.eval_date.localeCompare(a.eval_date));
-              const lastDate=itemHist[0]?.eval_date;
-              return `<tr style="border-bottom:1px solid #F1F5F9" onmouseover="this.style.background='#FAFBFF'" onmouseout="this.style.background=''">
-                <td style="padding:9px 10px;font-weight:600">${escH(item.name)}</td>
+              const itemHist=hist.filter(h=>h.equip_item_id===item.id).sort((a,b)=>a.eval_date.localeCompare(b.eval_date));
+              return `<tr style="border-bottom:1px solid #F1F5F9;vertical-align:top" onmouseover="this.style.background='#FAFBFF'" onmouseout="this.style.background=''">
+                <td style="padding:9px 10px;font-weight:600;word-break:break-word">${escH(item.name)}</td>
                 <td style="padding:9px 10px">
                   ${itemHist.length?`
-                    <div style="display:flex;flex-wrap:wrap;gap:4px">
-                      ${itemHist.slice(0,3).map(h=>`
-                        <span onclick="showHistModal('${escJs(h.id)}')"
-                          style="font-size:11px;background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:5px;cursor:pointer;display:inline-flex;align-items:center;gap:3px"
-                          title="${escH(h.author_name||'')}${h.note?' · '+escH(h.note):''}">
-                          ✓ ${fmtDate(h.eval_date)}${h.note?' <span style="opacity:.7">📝</span>':''}
-                        </span>`).join('')}
-                      ${itemHist.length>3?`<span style="font-size:11px;color:var(--muted)">+${itemHist.length-3}건</span>`:''}
+                    <div style="display:flex;flex-direction:column;gap:6px;${itemHist.length>4?'max-height:280px;overflow-y:auto;padding-right:4px':''}">
+                      ${itemHist.map(h=>{
+                        const {work,issue}=splitIssueNote(h.note);
+                        return `<div onclick="showHistModal('${escJs(h.id)}')"
+                          style="cursor:pointer;border:1px solid #E2E8F0;border-radius:8px;padding:7px 10px;background:#F8FAFC"
+                          title="클릭하여 수정">
+                          <div style="display:flex;align-items:center;gap:6px;margin-bottom:${work||issue?'4px':'0'}">
+                            <span style="font-size:11px;font-weight:700;background:#D1FAE5;color:#065F46;padding:1px 7px;border-radius:5px;white-space:nowrap">✓ ${fmtDate(h.eval_date)}</span>
+                            ${h.author_name?`<span style="font-size:10px;color:var(--muted)">${escH(h.author_name)}</span>`:''}
+                          </div>
+                          ${work?`<div style="font-size:12px;color:var(--text);line-height:1.5;white-space:pre-wrap">${escH(work)}</div>`:''}
+                          ${issue?`<div style="margin-top:4px;padding:5px 8px;background:#FEF3E2;border-left:3px solid #D97706;border-radius:5px">
+                            <span style="font-size:10px;font-weight:700;color:#B45309">⚠️ 이슈</span>
+                            <div style="font-size:12px;color:#92400E;line-height:1.5;white-space:pre-wrap;margin-top:2px">${escH(issue)}</div>
+                          </div>`:''}
+                        </div>`;
+                      }).join('')}
                     </div>`
                   :`<span style="font-size:11px;color:#CBD5E1">미진행</span>`}
                 </td>
                 <td style="padding:9px 10px;text-align:center">
                   ${cu?`<button onclick="showHistModal(null,'${escJs(pe.id)}','${escJs(item.id)}','${escJs(pjtId)}')"
-                    style="font-size:11px;border:1px solid var(--ev);color:var(--ev);background:var(--ev-light);border-radius:6px;padding:2px 8px;cursor:pointer">+ 기록</button>`:''}
+                    style="font-size:11px;border:1px solid var(--ev);color:var(--ev);background:var(--ev-light);border-radius:6px;padding:3px 8px;cursor:pointer;white-space:nowrap">+ 기록</button>`:''}
                 </td>
               </tr>`;
             }).join('')}
@@ -3892,6 +3900,15 @@ function fmtDate(d){if(!d)return'';const dt=new Date(d+'T00:00:00');return dt.ge
 function fmtDateShort(d){if(!d)return'';const dt=new Date(d+'T00:00:00');return (dt.getMonth()+1)+'/'+dt.getDate();}
 function fmtDateKo(d){if(!d)return'';const dt=new Date(d+'T00:00:00');return dt.getFullYear()+'년 '+(dt.getMonth()+1)+'월 '+dt.getDate()+'일 ('+DOW_KO[dt.getDay()]+')';}
 function escH(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function splitIssueNote(note){
+  if(!note) return {work:'',issue:''};
+  const marker='[이슈]';
+  const idx=note.indexOf(marker);
+  if(idx===-1) return {work:note,issue:''};
+  const work=note.slice(0,idx).trim();
+  const issue=note.slice(idx+marker.length).trim();
+  return {work,issue};
+}
 function escJs(s){return String(s||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 function statusLabel(s){return{done:'완료',progress:'진행중',blocked:'지연/이슈'}[s]||s;}
 function memberColor(m){const i=members.indexOf(m);return COLORS[i%COLORS.length];}
